@@ -42,7 +42,7 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Build backend
-        working-directory: ./backend
+        working-directory: ./backend/Minesweeper.API
         run: dotnet build --configuration Release
 
       - name: Perform CodeQL Analysis
