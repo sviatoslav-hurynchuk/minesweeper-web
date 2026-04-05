@@ -1,41 +1,69 @@
+using Microsoft.EntityFrameworkCore;
+using Minesweeper.API.Data;
+using Minesweeper.API.Models;
+using Scalar.AspNetCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
+
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.MapOpenApi(); 
+    app.MapScalarApiReference();
 }
 
 app.UseHttpsRedirection();
+app.UseCors();
 
-var summaries = new[]
+app.MapPost("/api/auth/guest", async (AppDbContext db, GuestRequest request) =>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    var finalUsername = string.IsNullOrWhiteSpace(request.Username)
+        ? $"Guest_{Random.Shared.Next(1000, 9999)}"
+        : request.Username;
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
+    var isNameTaken = await db.Users.AnyAsync(u => u.Username == finalUsername);
+    if (isNameTaken)
+    {
+        return Results.Conflict(new { Message = "This username is already taken." });
+    }
+
+    var user = new User
+    {
+        Username = finalUsername,
+        IsGuest = true
+    };
+
+    db.Users.Add(user);
+    await db.SaveChangesAsync();
+
+    return Results.Ok(new
+    {
+        user.Id,
+        user.Username,
+        user.IsGuest
+    });
 })
-.WithName("GetWeatherForecast");
+.WithName("CreateGuestUser");
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+public record GuestRequest(string? Username);
