@@ -11,6 +11,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
+builder.Services.AddSignalR();
 
 builder.Services.AddCors(options =>
 {
@@ -63,6 +64,8 @@ app.MapPost("/api/auth/guest", async (AppDbContext db, GuestRequest request) =>
     });
 })
 .WithName("CreateGuestUser");
+
+app.MapHub<Minesweeper.API.Hubs.GameHub>("/gamehub");
 
 app.Run();
 
