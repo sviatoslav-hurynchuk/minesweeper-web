@@ -7,9 +7,14 @@ export interface PlayerData {
     userId: string;
 }
 
+export interface Challenge {
+    challengerName: string;
+    challengerConnectionId: string;
+}
+
 export const useLobby = (username: string | null, userId: string | null) => {
     const [players, setPlayers] = useState<PlayerData[]>([]);
-    // Use ref for connection to avoid unnecessary re-renders
+    const [incomingChallenge, setIncomingChallenge] = useState<Challenge | null>(null);
     const connectionRef = useRef<signalR.HubConnection | null>(null);
 
     useEffect(() => {
@@ -24,7 +29,6 @@ export const useLobby = (username: string | null, userId: string | null) => {
 
         connection.start()
             .then(() => {
-                console.log("Connected to GameHub!");
                 connection.invoke("JoinLobby", username, userId)
                     .catch(e => console.error("JoinLobby error: ", e));
             })
@@ -34,12 +38,25 @@ export const useLobby = (username: string | null, userId: string | null) => {
             setPlayers(onlinePlayers);
         });
 
-        // Cleanup on unmount
+        // Listen for direct challenges
+        connection.on("ChallengeReceived", (challengerName: string, challengerConnectionId: string) => {
+            setIncomingChallenge({ challengerName, challengerConnectionId });
+        });
+
         return () => {
             connection.stop().catch(e => console.error("Stop error: ", e));
             connectionRef.current = null;
         };
     }, [username, userId]);
 
-    return { players };
+    // Function to trigger challenge from UI
+    const sendChallenge = (targetConnectionId: string) => {
+        connectionRef.current?.invoke("ChallengePlayer", targetConnectionId)
+            .catch(e => console.error("Challenge error: ", e));
+    };
+
+    // Function to clear challenge (e.g., if declined)
+    const clearChallenge = () => setIncomingChallenge(null);
+
+    return { players, incomingChallenge, sendChallenge, clearChallenge };
 };

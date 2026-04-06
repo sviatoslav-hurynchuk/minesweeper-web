@@ -37,4 +37,12 @@ public class GameHub : Hub
 
         await base.OnDisconnectedAsync(exception);
     }
+
+    public async Task ChallengePlayer(string targetConnectionId)
+    {
+        if (_onlinePlayers.TryGetValue(Context.ConnectionId, out var sender))
+        {
+            await Clients.Client(targetConnectionId).SendAsync("ChallengeReceived", sender.Username, Context.ConnectionId);
+        }
+    }
 }
