@@ -1,0 +1,67 @@
+﻿using Microsoft.AspNetCore.SignalR;
+using System.Collections.Concurrent;
+
+namespace Minesweeper.API.Hubs;
+
+public class PlayerData
+{
+    public required string ConnectionId { get; set; }
+    public required string Username { get; set; }
+    public Guid? UserId { get; set; }
+}
+
+public class GameHub : Hub
+{
+    private static readonly ConcurrentDictionary<string, PlayerData> _onlinePlayers = new();
+
+    public async Task JoinLobby(string username, Guid userId)
+    {
+        if (string.IsNullOrWhiteSpace(username) || username.Length > 50)
+        {
+            throw new HubException("Invalid username");
+        }
+
+        var player = new PlayerData
+        {
+            ConnectionId = Context.ConnectionId,
+            Username = username,
+            UserId = userId
+        };
+
+        _onlinePlayers.TryAdd(Context.ConnectionId, player);
+
+        await Clients.All.SendAsync("LobbyUpdated", _onlinePlayers.Values);
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        if (_onlinePlayers.TryRemove(Context.ConnectionId, out var player))
+        {
+            await Clients.All.SendAsync("LobbyUpdated", _onlinePlayers.Values);
+        }
+
+        await base.OnDisconnectedAsync(exception);
+    }
+
+    public async Task ChallengePlayer(string targetConnectionId)
+    {
+        if (_onlinePlayers.TryGetValue(Context.ConnectionId, out var sender))
+        {
+            await Clients.Client(targetConnectionId).SendAsync("ChallengeReceived", sender.Username, Context.ConnectionId);
+        }
+    }
+
+    public async Task AcceptChallenge(string challengerConnectionId)
+    {
+        if (!_onlinePlayers.ContainsKey(challengerConnectionId))
+        {
+            throw new HubException("Challenger disconnected");
+        }
+
+        var matchId = Guid.NewGuid().ToString();
+
+        await Clients.Client(challengerConnectionId).SendAsync("GameStarted", matchId);
+
+        await Clients.Client(Context.ConnectionId).SendAsync("GameStarted", matchId);
+    }
+}
