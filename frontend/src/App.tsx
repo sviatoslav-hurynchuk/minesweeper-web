@@ -1,19 +1,28 @@
+import { useLobby } from './hooks/useLobby';
+
 function App() {
-  return (
-      <div className="flex h-screen w-full items-center justify-center bg-gray-900">
-        <div className="text-center">
-          <h1 className="text-5xl font-bold text-green-400 mb-4">
-            Minesweeper 💣
-          </h1>
-          <p className="text-xl text-gray-300">
-            Tailwind v4 успішно підключено!
-          </p>
-          <button className="mt-6 rounded bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-500 cursor-pointer">
-            Почати гру
-          </button>
+    // Hardcoded user for testing Phase 2 connection
+    const testUsername = "Sviatoslav_Test";
+    const testUserId = "00000000-0000-0000-0000-000000000001";
+
+    const { players } = useLobby(testUsername, testUserId);
+
+    return (
+        <div className="p-8 font-sans">
+            <h1 className="text-2xl font-bold mb-4">Minesweeper Lobby</h1>
+
+            <div className="bg-gray-100 p-4 rounded-lg w-96">
+                <h2 className="text-lg font-semibold mb-2">Players Online ({players.length}):</h2>
+                <ul className="list-disc pl-5">
+                    {players.map(player => (
+                        <li key={player.connectionId}>
+                            {player.username} <span className="text-xs text-gray-500">({player.connectionId})</span>
+                        </li>
+                    ))}
+                </ul>
+            </div>
         </div>
-      </div>
-  )
+    );
 }
 
-export default App
+export default App;
