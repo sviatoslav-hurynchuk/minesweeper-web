@@ -12,10 +12,27 @@ export interface Challenge {
     challengerConnectionId: string;
 }
 
+export interface GameInfo {
+    matchId: string;
+    rows: number;
+    cols: number;
+}
+
+export interface CellUpdate {
+    index: number;
+    value: number;
+}
+
 export const useLobby = (username: string | null, userId: string | null) => {
-    const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+    const [activeGame, setActiveGame] = useState<GameInfo | null>(null);
     const [players, setPlayers] = useState<PlayerData[]>([]);
     const [incomingChallenge, setIncomingChallenge] = useState<Challenge | null>(null);
+
+    const [boardUpdates, setBoardUpdates] = useState<CellUpdate[]>([]);
+    const [gameOverState, setGameOverState] = useState<{loserConnectionId: string, mineIndex: number} | null>(null);
+    // FIXED: Added state for flags
+    const [flags, setFlags] = useState<number[]>([]);
+
     const connectionRef = useRef<signalR.HubConnection | null>(null);
 
     useEffect(() => {
@@ -48,15 +65,43 @@ export const useLobby = (username: string | null, userId: string | null) => {
             setIncomingChallenge({ challengerName, challengerConnectionId });
         });
 
-        connection.on("GameStarted", (matchId: string) => {
-            setActiveMatchId(matchId);
+        connection.on("GameStarted", (info: GameInfo) => {
+            setActiveGame(info);
             setIncomingChallenge(null);
+            setBoardUpdates([]);
+            setGameOverState(null);
+            setFlags([]);
         });
+
+        connection.on("CellsRevealed", (updates: CellUpdate[]) => {
+            setBoardUpdates(prev => [...prev, ...updates]);
+        });
+
+        connection.on("FlagToggled", (data: { index: number, isFlagged: boolean }) => {
+            if (data.isFlagged) {
+                setFlags(prev => [...prev, data.index]);
+            } else {
+                setFlags(prev => prev.filter(idx => idx !== data.index));
+            }
+        });
+
+        connection.on("GameWon", () => {
+            alert("WE HAVE A WINNER!");
+        });
+
+        connection.on("GameOver", (data: { loserConnectionId: string, mineIndex: number }) => {
+            setGameOverState(data);
+        });
+
         return () => {
             connection.stop().catch(e => console.error("Stop error: ", e));
             connectionRef.current = null;
         };
     }, [username, userId]);
+
+    const toggleFlag = (matchId: string, index: number) => {
+        connectionRef.current?.invoke("ToggleFlag", matchId, index).catch(console.error);
+    };
 
     const sendChallenge = (targetConnectionId: string) => {
         connectionRef.current?.invoke("ChallengePlayer", targetConnectionId)
@@ -67,7 +112,25 @@ export const useLobby = (username: string | null, userId: string | null) => {
         connectionRef.current?.invoke("AcceptChallenge", challengerConnectionId)
             .catch(e => console.error("Accept error: ", e));
     };
+
     const clearChallenge = () => setIncomingChallenge(null);
 
-    return { players, incomingChallenge, sendChallenge, clearChallenge, acceptChallenge, activeMatchId };
+    const revealCell = (matchId: string, index: number) => {
+        connectionRef.current?.invoke("RevealCell", matchId, index)
+            .catch(e => console.error("Reveal error: ", e));
+    };
+
+    return {
+        players,
+        incomingChallenge,
+        sendChallenge,
+        clearChallenge,
+        acceptChallenge,
+        activeGame,
+        boardUpdates,
+        gameOverState,
+        revealCell,
+        flags,
+        toggleFlag
+    };
 };

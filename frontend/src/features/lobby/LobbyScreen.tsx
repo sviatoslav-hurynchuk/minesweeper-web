@@ -1,16 +1,32 @@
 import { useLobby } from '../../hooks/useLobby';
 import { GameScreen } from '../game/GameScreen';
-import type {User} from '../../types';
+import type { User } from '../../types';
 
 interface LobbyScreenProps {
     user: User;
 }
 
 export const LobbyScreen = ({ user }: LobbyScreenProps) => {
-    const { players, incomingChallenge, sendChallenge, clearChallenge, acceptChallenge, activeMatchId } = useLobby(user.username, user.id);
+    // 1. ДІСТАЄМО flags ТА toggleFlag З ХУКА
+    const {
+        players, incomingChallenge, sendChallenge, clearChallenge,
+        acceptChallenge, activeGame, boardUpdates, gameOverState, revealCell,
+        flags, toggleFlag
+    } = useLobby(user.username, user.id);
 
-    if (activeMatchId) {
-        return <GameScreen matchId={activeMatchId} user={user} />;
+    if (activeGame) {
+        return (
+            <GameScreen
+                game={activeGame}
+                user={user}
+                boardUpdates={boardUpdates}
+                gameOverState={gameOverState}
+                onRevealCell={revealCell}
+                // 2. ПЕРЕДАЄМО ЇХ У ГРУ
+                flags={flags}
+                onToggleFlag={toggleFlag}
+            />
+        );
     }
 
     return (
