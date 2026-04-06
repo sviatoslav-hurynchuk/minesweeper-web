@@ -56,8 +56,10 @@ function App() {
 }
 
 function LobbyScreen({ user }: { user: User }) {
-    const { players, incomingChallenge, sendChallenge, clearChallenge } = useLobby(user.username, user.id);
-
+    const { players, incomingChallenge, sendChallenge, clearChallenge, acceptChallenge, activeMatchId } = useLobby(user.username, user.id);
+    if (activeMatchId) {
+        return <GameScreen matchId={activeMatchId} user={user} />;
+    }
     return (
         <div className="p-8 font-sans bg-black-50 min-h-screen relative">
             <div className="max-w-2xl mx-auto">
@@ -113,7 +115,7 @@ function LobbyScreen({ user }: { user: User }) {
                                 Decline
                             </button>
                             <button
-                                onClick={() => alert("Game start logic coming soon!")}
+                                onClick={() => acceptChallenge(incomingChallenge.challengerConnectionId)}
                                 className="px-6 py-2 bg-blue-500 text-white rounded font-semibold hover:bg-blue-600 cursor-pointer"
                             >
                                 Accept
@@ -124,6 +126,19 @@ function LobbyScreen({ user }: { user: User }) {
             )}
         </div>
     );
+    function GameScreen({ matchId, user }: { matchId: string, user: User }) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
+                <h1 className="text-3xl font-bold mb-4">💣 Match in Progress!</h1>
+                <p className="text-xl mb-2">Player: <span className="text-blue-400">{user.username}</span></p>
+                <p className="text-gray-400">Match ID: {matchId}</p>
+
+                <div className="mt-8 p-12 border-4 border-dashed border-gray-700 rounded-xl">
+                    <p className="text-gray-500">Game board will be rendered here...</p>
+                </div>
+            </div>
+        );
+    }
 }
 
 export default App;

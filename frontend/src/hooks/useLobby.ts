@@ -13,6 +13,7 @@ export interface Challenge {
 }
 
 export const useLobby = (username: string | null, userId: string | null) => {
+    const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
     const [players, setPlayers] = useState<PlayerData[]>([]);
     const [incomingChallenge, setIncomingChallenge] = useState<Challenge | null>(null);
     const connectionRef = useRef<signalR.HubConnection | null>(null);
@@ -38,25 +39,30 @@ export const useLobby = (username: string | null, userId: string | null) => {
             setPlayers(onlinePlayers);
         });
 
-        // Listen for direct challenges
         connection.on("ChallengeReceived", (challengerName: string, challengerConnectionId: string) => {
             setIncomingChallenge({ challengerName, challengerConnectionId });
         });
 
+        connection.on("GameStarted", (matchId: string) => {
+            setActiveMatchId(matchId);
+            setIncomingChallenge(null);
+        });
         return () => {
             connection.stop().catch(e => console.error("Stop error: ", e));
             connectionRef.current = null;
         };
     }, [username, userId]);
 
-    // Function to trigger challenge from UI
     const sendChallenge = (targetConnectionId: string) => {
         connectionRef.current?.invoke("ChallengePlayer", targetConnectionId)
             .catch(e => console.error("Challenge error: ", e));
     };
 
-    // Function to clear challenge (e.g., if declined)
+    const acceptChallenge = (challengerConnectionId: string) => {
+        connectionRef.current?.invoke("AcceptChallenge", challengerConnectionId)
+            .catch(e => console.error("Accept error: ", e));
+    };
     const clearChallenge = () => setIncomingChallenge(null);
 
-    return { players, incomingChallenge, sendChallenge, clearChallenge };
+    return { players, incomingChallenge, sendChallenge, clearChallenge, acceptChallenge, activeMatchId };
 };

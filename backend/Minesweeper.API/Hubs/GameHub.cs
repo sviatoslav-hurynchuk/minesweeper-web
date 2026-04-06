@@ -45,4 +45,13 @@ public class GameHub : Hub
             await Clients.Client(targetConnectionId).SendAsync("ChallengeReceived", sender.Username, Context.ConnectionId);
         }
     }
+
+    public async Task AcceptChallenge(string challengerConnectionId)
+    {
+        var matchId = Guid.NewGuid().ToString();
+
+        await Clients.Client(challengerConnectionId).SendAsync("GameStarted", matchId);
+
+        await Clients.Client(Context.ConnectionId).SendAsync("GameStarted", matchId);
+    }
 }
