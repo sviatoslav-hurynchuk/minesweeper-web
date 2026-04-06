@@ -16,6 +16,11 @@ public class GameHub : Hub
 
     public async Task JoinLobby(string username, Guid userId)
     {
+        if (string.IsNullOrWhiteSpace(username) || username.Length > 50)
+        {
+            throw new HubException("Invalid username");
+        }
+
         var player = new PlayerData
         {
             ConnectionId = Context.ConnectionId,
@@ -48,6 +53,11 @@ public class GameHub : Hub
 
     public async Task AcceptChallenge(string challengerConnectionId)
     {
+        if (!_onlinePlayers.ContainsKey(challengerConnectionId))
+        {
+            throw new HubException("Challenger disconnected");
+        }
+
         var matchId = Guid.NewGuid().ToString();
 
         await Clients.Client(challengerConnectionId).SendAsync("GameStarted", matchId);

@@ -28,6 +28,11 @@ export const useLobby = (username: string | null, userId: string | null) => {
 
         connectionRef.current = connection;
 
+        connection.onreconnected(() => {
+            connection.invoke("JoinLobby", username, userId)
+                .catch(e => console.error("Rejoin error: ", e));
+        });
+
         connection.start()
             .then(() => {
                 connection.invoke("JoinLobby", username, userId)
