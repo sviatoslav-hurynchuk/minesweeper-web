@@ -7,7 +7,6 @@ interface LobbyScreenProps {
 }
 
 export const LobbyScreen = ({ user }: LobbyScreenProps) => {
-    // Note: If you updated useLobby to return activeGame instead of activeMatchId, adjust accordingly
     const { players, incomingChallenge, sendChallenge, clearChallenge, acceptChallenge, activeMatchId } = useLobby(user.username, user.id);
 
     if (activeMatchId) {
@@ -55,10 +54,16 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
 
             {/* Challenge Alert Modal */}
             {incomingChallenge && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <div className="bg-white p-6 rounded-xl shadow-lg text-center">
-                        <h3 className="text-2xl font-bold mb-2">⚔️ New Challenge!</h3>
-                        <p className="mb-6 font-medium text-gray-700">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
+                    <div
+                        className="bg-white p-6 rounded-xl shadow-lg text-center"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="challenge-title"
+                        aria-describedby="challenge-desc"
+                    >
+                        <h3 id="challenge-title" className="text-2xl font-bold mb-2">⚔️ New Challenge!</h3>
+                        <p id="challenge-desc" className="mb-6 font-medium text-gray-700">
                             <span className="text-blue-600">{incomingChallenge.challengerName}</span> wants to play!
                         </p>
                         <div className="flex gap-4 justify-center">
