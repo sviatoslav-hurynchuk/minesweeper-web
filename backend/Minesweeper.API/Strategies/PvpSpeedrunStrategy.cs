@@ -34,7 +34,6 @@ namespace Minesweeper.API.Strategies
             {
                 // Apply 10-second penalty
                 player.PenaltyUntil = DateTime.UtcNow.AddSeconds(10);
-                player.Board.ResetBoard(); // Clear revealed cells
 
                 await clientProxy.SendAsync("PlayerFrozen", 10);
                 await opponentProxy.SendAsync("OpponentMistake");
@@ -43,6 +42,8 @@ namespace Minesweeper.API.Strategies
             {
                 // Send updated board state to current player
                 await clientProxy.SendAsync("BoardUpdated", result.RevealedCells);
+
+                await clientProxy.SendAsync("PlayerProgress", player.Board.GetProgressPercentage());
 
                 // Send progress metric to opponent
                 await opponentProxy.SendAsync("OpponentProgress", player.Board.GetProgressPercentage());

@@ -9,12 +9,14 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
     const [gameStatus, setGameStatus] = useState<"Playing" | "Victory" | "Defeat">("Playing");
     const [finalMines, setFinalMines] = useState<number[]>([]);
 
+    // NEW: Flagging State (Using a Set for O(1) lookups)
+    const [flaggedCells, setFlaggedCells] = useState<Set<number>>(new Set());
+
     // PvP Specific State
     const [freezeTimer, setFreezeTimer] = useState(0);
+    const [playerProgress, setPlayerProgress] = useState(0);
     const [opponentProgress, setOpponentProgress] = useState(0);
-
-    // DERIVED STATE: No need for a separate useState.
-    // If the timer is greater than 0, the player is frozen.
+    // DERIVED STATE
     const isFrozen = freezeTimer > 0;
 
     useEffect(() => {
@@ -31,7 +33,7 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
             });
         });
 
-        // 2. Handle Game Over (Co-op/Solo death, or Victory)
+        // 2. Handle Game Over
         connection.on("MatchFinished", (payload: MatchFinishedPayload) => {
             setGameStatus(payload.status);
             if (payload.mines) {
@@ -42,25 +44,41 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
         // 3. Handle PvP Penalty
         connection.on("PlayerFrozen", (seconds: number) => {
             setFreezeTimer(seconds);
-            setRevealedCells({}); // Reset local board view for penalty
         });
 
-        // 4. Handle Opponent Progress (PvP)
+        connection.on("PlayerProgress", (percentage: number) => {
+            setPlayerProgress(percentage);
+        });
+        // 4. Handle Opponent Progress
         connection.on("OpponentProgress", (percentage: number) => {
             setOpponentProgress(percentage);
+        });
+
+        // 5. NEW: Handle Flag Syncing (Important for Co-op)
+        connection.on("FlagToggled", (index: number, isFlagged: boolean) => {
+            setFlaggedCells(prev => {
+                const updated = new Set(prev);
+                if (isFlagged) {
+                    updated.add(index);
+                } else {
+                    updated.delete(index);
+                }
+                return updated;
+            });
         });
 
         return () => {
             connection.off("BoardUpdated");
             connection.off("MatchFinished");
             connection.off("PlayerFrozen");
+            connection.off("PlayerProgress");
             connection.off("OpponentProgress");
+            connection.off("FlagToggled");
         };
     }, [connection]);
 
-    // Cleaned up timer logic for PvP Penalty
+    // Timer logic for PvP Penalty
     useEffect(() => {
-        // Exit early if there's no active timer
         if (freezeTimer <= 0) return;
 
         const timer = setInterval(() => {
@@ -70,19 +88,47 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
         return () => clearInterval(timer);
     }, [freezeTimer]);
 
-    // Actions
+    // ACTIONS
+
     const revealCell = async (x: number, y: number) => {
         if (gameStatus !== "Playing" || isFrozen) return;
         await connection?.invoke("RevealCell", matchId, x, y);
     };
 
+    const toggleFlag = async (index: number) => {
+        if (gameStatus !== "Playing" || isFrozen) return;
+
+        // 1. Читаємо поточний стан ПРЯМО ЗІ СТЕЙТУ
+        const isCurrentlyFlagged = flaggedCells.has(index);
+
+        // 2. Визначаємо новий стан (якщо був - знімаємо, якщо не було - ставимо)
+        const newFlagState = !isCurrentlyFlagged;
+
+        // 3. Оновлюємо UI (Оптимістичний апдейт)
+        setFlaggedCells(prev => {
+            const next = new Set(prev);
+            if (isCurrentlyFlagged) {
+                next.delete(index);
+            } else {
+                next.add(index);
+            }
+            return next;
+        });
+
+        // 4. Відправляємо на бекенд ПРАВИЛЬНИЙ новий стан
+        await connection?.invoke("ToggleFlag", matchId, index, newFlagState);
+    };
+
     return {
         revealedCells,
+        flaggedCells, // Exported
         gameStatus,
         finalMines,
         isFrozen,
         freezeTimer,
+        playerProgress,
         opponentProgress,
-        revealCell
+        revealCell,
+        toggleFlag    // Exported
     };
 };
