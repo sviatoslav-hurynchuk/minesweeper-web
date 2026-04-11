@@ -79,7 +79,11 @@ namespace Minesweeper.API.GameEngine
 
             // The clicked cell and its neighbors must be safe
             var safeZone = new HashSet<int>(GetNeighbors(safeIndex)) { safeIndex };
-
+            int maxMines = totalCells - safeZone.Count;
+            if (MinesCount > maxMines)
+            {
+                throw new InvalidOperationException($"Cannot place {MinesCount} mines. Maximum for this board size is {maxMines}.");
+            }
             while (MinePositions.Count < MinesCount)
             {
                 int pos = rand.Next(totalCells);

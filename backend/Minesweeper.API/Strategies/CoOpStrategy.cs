@@ -23,11 +23,13 @@ namespace Minesweeper.API.Strategies
         {
             var player = session.Players[connectionId];
 
-            // If the game is already over for the group, ignore further clicks
-            if (player.IsGameOver) return;
+            RevealResult result; if (player.IsGameOver) return;
 
-            // Reveal the cell on the shared board
-            var result = player.Board.RevealCell(x, y);
+            lock (player.Board)
+            {
+                // Reveal the cell on the shared board
+                result = player.Board.RevealCell(x, y);
+            }
 
             if (result.IsMine)
             {

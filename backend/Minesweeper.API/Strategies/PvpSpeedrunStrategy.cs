@@ -32,21 +32,24 @@ namespace Minesweeper.API.Strategies
 
             if (result.IsMine)
             {
-                // Apply 10-second penalty
                 player.PenaltyUntil = DateTime.UtcNow.AddSeconds(10);
+
+                await clientProxy.SendAsync("BoardUpdated", result.RevealedCells);
 
                 await clientProxy.SendAsync("PlayerFrozen", 10);
                 await opponentProxy.SendAsync("OpponentMistake");
             }
             else
             {
-                // Send updated board state to current player
                 await clientProxy.SendAsync("BoardUpdated", result.RevealedCells);
-
                 await clientProxy.SendAsync("PlayerProgress", player.Board.GetProgressPercentage());
-
-                // Send progress metric to opponent
                 await opponentProxy.SendAsync("OpponentProgress", player.Board.GetProgressPercentage());
+
+                if (player.Board.IsWinConditionMet())
+                {
+                    await clientProxy.SendAsync("MatchFinished", new { Status = "Victory" });
+                    await opponentProxy.SendAsync("MatchFinished", new { Status = "Defeat" });
+                }
             }
         }
     }

@@ -18,9 +18,9 @@ namespace Minesweeper.API.Strategies
 
         public async Task HandleRevealAsync(GameState session, string connectionId, int x, int y, IClientProxy clientProxy, IClientProxy opponentProxy, IClientProxy groupProxy)
         {
-            var player = session.Players[connectionId];
+            if (!session.Players.TryGetValue(connectionId, out var player))
+                return;
 
-            // Ignore clicks if the game is already finished
             if (player.IsGameOver) return;
 
             var result = player.Board.RevealCell(x, y);

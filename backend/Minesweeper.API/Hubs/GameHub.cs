@@ -35,7 +35,7 @@ namespace Minesweeper.API.Hubs
                 await Clients.All.SendAsync("LobbyUpdated", OnlinePlayers.Values);
             }
             // Auto-leave match if disconnected
-            var activeMatch = ActiveMatches.Values.FirstOrDefault(m => m.Players.ContainsKey(Context.ConnectionId));
+            var activeMatch = ActiveMatches.Values.ToList().FirstOrDefault(m => m.Players.ContainsKey(Context.ConnectionId));
             if (activeMatch != null) await LeaveMatch(activeMatch.MatchId);
 
             await base.OnDisconnectedAsync(exception);

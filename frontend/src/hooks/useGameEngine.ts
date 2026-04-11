@@ -24,8 +24,8 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
     useEffect(() => {
         if (!connection) return;
 
-        // 1. Handle Flood Fill & Safe Clicks
-        connection.on("BoardUpdated", (newCells: CellInfo[]) => {
+        // 1. Оголошуємо всі функції-обробники окремо
+        const handleBoardUpdated = (newCells: CellInfo[]) => {
             setRevealedCells(prev => {
                 const updated = { ...prev };
                 newCells.forEach(cell => {
@@ -33,92 +33,92 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
                 });
                 return updated;
             });
-        });
+        };
 
-        // 2. Handle Game Over
-        connection.on("MatchFinished", (payload: MatchFinishedPayload) => {
+        const handleMatchFinished = (payload: MatchFinishedPayload) => {
             setGameStatus(payload.status);
             if (payload.mines) {
                 setFinalMines(payload.mines);
             }
-        });
+        };
 
-        // 3. Handle PvP Penalty
-        connection.on("PlayerFrozen", (seconds: number) => {
-            setFreezeTimer(seconds);
-        });
+        const handlePlayerFrozen = (seconds: number) => setFreezeTimer(seconds);
+        const handlePlayerProgress = (percentage: number) => setPlayerProgress(percentage);
+        const handleOpponentProgress = (percentage: number) => setOpponentProgress(percentage);
 
-        connection.on("PlayerProgress", (percentage: number) => {
-            setPlayerProgress(percentage);
-        });
-        // 4. Handle Opponent Progress
-        connection.on("OpponentProgress", (percentage: number) => {
-            setOpponentProgress(percentage);
-        });
-
-        // 5. NEW: Handle Flag Syncing (Important for Co-op)
-        connection.on("FlagToggled", (index: number, isFlagged: boolean) => {
+        const handleFlagToggled = (index: number, isFlagged: boolean) => {
             setFlaggedCells(prev => {
                 const updated = new Set(prev);
-                if (isFlagged) {
-                    updated.add(index);
-                } else {
-                    updated.delete(index);
-                }
+                if (isFlagged) updated.add(index);
+                else updated.delete(index);
                 return updated;
             });
-        });
+        };
 
+        // 2. Підписуємось, передаючи саме ці посилання
+        connection.on("BoardUpdated", handleBoardUpdated);
+        connection.on("MatchFinished", handleMatchFinished);
+        connection.on("PlayerFrozen", handlePlayerFrozen);
+        connection.on("PlayerProgress", handlePlayerProgress);
+        connection.on("OpponentProgress", handleOpponentProgress);
+        connection.on("FlagToggled", handleFlagToggled);
+
+        // 3. Відписуємось ТОЧНО від цих функцій (безпечне очищення)
         return () => {
-            connection.off("BoardUpdated");
-            connection.off("MatchFinished");
-            connection.off("PlayerFrozen");
-            connection.off("PlayerProgress");
-            connection.off("OpponentProgress");
-            connection.off("FlagToggled");
+            connection.off("BoardUpdated", handleBoardUpdated);
+            connection.off("MatchFinished", handleMatchFinished);
+            connection.off("PlayerFrozen", handlePlayerFrozen);
+            connection.off("PlayerProgress", handlePlayerProgress);
+            connection.off("OpponentProgress", handleOpponentProgress);
+            connection.off("FlagToggled", handleFlagToggled);
         };
     }, [connection]);
 
-    // Timer logic for PvP Penalty
+    // Таймер [залишається як ми робили раніше]
     useEffect(() => {
-        if (freezeTimer <= 0) return;
-
+        if (!isFrozen) return;
         const timer = setInterval(() => {
-            setFreezeTimer(prev => prev - 1);
+            setFreezeTimer(prev => (prev <= 1 ? 0 : prev - 1));
         }, 1000);
-
         return () => clearInterval(timer);
-    }, [freezeTimer]);
+    }, [isFrozen]);
 
     // ACTIONS
 
     const revealCell = async (x: number, y: number) => {
-        if (gameStatus !== "Playing" || isFrozen) return;
-        await connection?.invoke("RevealCell", matchId, x, y);
+        // ✅ Жорстка перевірка з'єднання
+        if (!connection || gameStatus !== "Playing" || isFrozen) return;
+
+        // Без `?.` - якщо з'єднання є, воно точно викличе метод
+        await connection.invoke("RevealCell", matchId, x, y);
     };
 
     const toggleFlag = async (index: number) => {
-        if (gameStatus !== "Playing" || isFrozen) return;
+        // ✅ Жорстка перевірка з'єднання
+        if (!connection || gameStatus !== "Playing" || isFrozen) return;
 
-        // 1. Читаємо поточний стан ПРЯМО ЗІ СТЕЙТУ
         const isCurrentlyFlagged = flaggedCells.has(index);
-
-        // 2. Визначаємо новий стан (якщо був - знімаємо, якщо не було - ставимо)
         const newFlagState = !isCurrentlyFlagged;
 
-        // 3. Оновлюємо UI (Оптимістичний апдейт)
         setFlaggedCells(prev => {
             const next = new Set(prev);
-            if (isCurrentlyFlagged) {
-                next.delete(index);
-            } else {
-                next.add(index);
-            }
+            if (isCurrentlyFlagged) next.delete(index);
+            else next.add(index);
             return next;
         });
 
-        // 4. Відправляємо на бекенд ПРАВИЛЬНИЙ новий стан
-        await connection?.invoke("ToggleFlag", matchId, index, newFlagState);
+        try {
+            // Без `?.` - тепер помилки мережі гарантовано потраплять у catch
+            await connection.invoke("ToggleFlag", matchId, index, newFlagState);
+        } catch (error) {
+            setFlaggedCells(prev => {
+                const next = new Set(prev);
+                if (isCurrentlyFlagged) next.add(index);
+                else next.delete(index);
+                return next;
+            });
+            console.error("ToggleFlag failed:", error);
+        }
     };
 
     return {
