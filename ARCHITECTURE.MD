@@ -1,10 +1,10 @@
 # 💣 Minesweeper Web - Architecture & Master Plan
 
 ## 1. Project Overview
-Багатокористувацька веб-версія гри "Сапер" з підтримкою режимів Solo та PvP, розроблена на сучасному стеку технологій. Архітектура закладається з урахуванням майбутнього розширення (Co-op режим, повноцінна JWT-автентифікація).
+A multiplayer web version of Minesweeper supporting multiple game modes (Solo, Co-op, PvP Speedrun), built on a modern technology stack.
 
-**Технологічний стек:**
-* **Frontend:** React 18+, TypeScript, Vite, Tailwind CSS v4.
+**Tech Stack:**
+* **Frontend:** React 18+, TypeScript, Vite, Tailwind CSS v4. (Architecture: Vertical Slices / Feature-based).
 * **Backend:** C# .NET 8 (Minimal APIs), Entity Framework Core, SignalR.
 * **Database:** PostgreSQL (via Docker).
 
@@ -12,112 +12,107 @@
 
 ## 2. Core Architecture
 
-Система розділена на 3 головні шари:
-1.  **Persistent Storage (PostgreSQL):** Зберігає користувачів (реєстрація/гості), результати Solo-рекордів (Leaderboard) та історію мультиплеєрних матчів (Match History).
-2.  **In-Memory State (C# Backend):** Оскільки гра відбувається в реальному часі, поточний стан ігрових дошок, активні підключення (Лобі) та таймери зберігаються в оперативній пам'яті сервера (використовуючи `ConcurrentDictionary`).
-3.  **Real-time Communication (SignalR):** Забезпечує двосторонній зв'язок. Сервер миттєво повідомляє клієнтів про онлайн-статус інших гравців, інвайти на гру та кліки по ігровому полю.
+The system is divided into 3 main layers:
+
+1.  **Persistent Storage (PostgreSQL):** Stores user data (registered/guests), Solo high scores (Leaderboard), and multiplayer match history (Match History).
+2.  **In-Memory State (C# Backend):** Since the game occurs in real-time, the current state of the game boards (`GameState`) and active connections (Lobby) are stored in the server's RAM (using `ConcurrentDictionary`). Depending on the mode, the `GameState` can hold a single shared board (Co-op) or two independent boards with the identical mine seed (PvP).
+3.  **Real-time Communication (SignalR):** Provides two-way communication. The server instantly notifies clients about the online status of other players, game invites, board clicks, flags, and win/loss conditions.
 
 ---
 
 ## 3. Database Schema (Entity Framework Core)
 
-### `User` (Користувач)
-Готуємо під майбутній JWT. Для гостей `PasswordHash` буде `null`.
+### `User`
+Prepared for future JWT integration. For guests, `PasswordHash` is `null`.
 * `Id` (Guid) - PK
-* `Username` (string) - Унікальне ім'я
-* `IsGuest` (bool) - Флаг, чи це тимчасовий акаунт
-* `PasswordHash` (string?) - Nullable, для майбутньої реєстрації
+* `Username` (string) - Unique name
+* `IsGuest` (bool) - Flag indicating if this is a temporary account
+* `PasswordHash` (string?) - Nullable, for registered accounts
 * `CreatedAt` (DateTime)
 
-### `SoloLeaderboard` (Таблиця лідерів)
-Суто для одиночних забігів без права на помилку (одна міна = смерть).
+### `SoloLeaderboard`
+For single-player runs.
 * `Id` (Guid) - PK
 * `UserId` (Guid) - FK to User
 * `Difficulty` (enum: Easy, Medium, Hard)
-* `TimeSpentMs` (long) - Час у мілісекундах
+* `TimeSpentMs` (long) - Time in milliseconds
 * `PlayedAt` (DateTime)
 
-### `MatchHistory` (Історія матчів)
-Зберігає результати PvP (і майбутніх Co-op) ігор.
+### `MatchHistory`
+Stores the results of multiplayer games.
 * `Id` (Guid) - PK
 * `GameMode` (enum: PvP, CoOp)
 * `Player1Id` (Guid) - FK to User
 * `Player2Id` (Guid) - FK to User
-* `WinnerId` (Guid?) - Nullable (якщо нічия або Co-op)
+* `WinnerId` (Guid?) - Nullable (In Co-op, the winners are either both players or neither)
 * `DurationMs` (long)
-* `SettingsSnapshot` (jsonb / string) - Збережені налаштування (напр. "Penalty: Freeze 5s")
 * `PlayedAt` (DateTime)
 
 ---
 
 ## 4. SignalR & Real-Time Flow
 
-Додаток використовуватиме один головний хаб — `GameHub`, який матиме два логічні стани для клієнта: Лобі та Гра.
+The application uses a single main hub — `GameHub`, which manages the Lobby and Game states.
 
-### The Lobby (Лобі)
-* Користувач підключається -> Додається в `ConcurrentDictionary<string, Player>` (ConnectionId -> PlayerData).
-* **Broadcasting:** При підключенні нового гравця, сервер відправляє подію `LobbyUpdated` всім клієнтам. React малює список онлайн-гравців (як у Steam).
-* **Invites:** Гравець А викликає `SendInvite(TargetConnectionId, GameSettings)`. Гравець Б отримує подію `ReceiveInvite`. При згоді обидва додаються в SignalR Group (Кімнату).
+### The Lobby
+* User connects -> Added to `ConcurrentDictionary<string, PlayerData>`.
+* **Broadcasting:** When a new player connects, the server sends a `LobbyUpdated` event to all clients.
+* **Invites:** Player A triggers `ChallengePlayer` (selecting the mode: Co-op or PvP). Player B receives a `ChallengeReceived` event. Upon acceptance, the corresponding `GameState` is created.
 
-### The Game (Ігровий процес)
-* Сервер генерує ігрове поле (масив клітинок) і тримає його в пам'яті. Клієнтам відправляється лише розмірність дошки (без мін).
-* Клієнт клікає на `[X, Y]` -> відправляє `RevealCell(X, Y)`.
-* Сервер валідує клік. Якщо міна:
-    * *Якщо налаштування "Freeze":* Сервер блокує прийом кліків від цього гравця на N секунд, відправляє подію `PlayerFrozen(Duration)`.
-    * *Якщо налаштування "Death":* Гра закінчується, відправляється подія `GameOver`.
-* Сервер розсилає `BoardUpdated(Cells)` всім у кімнаті.
+### The Game
+* The server holds the board parameters in memory. Clients only receive the board dimensions initially.
+* **Safe First Click:** Mines are generated (`GenerateSafeBoard`) only during the player's first click to guarantee a safe starting zone (in PvP, the exact same matrix is generated for both players).
+* **Flood Fill:** Clicking on an empty cell recursively reveals all adjacent empty zones on the backend.
+* **Chording:** The frontend supports quickly revealing cells (Chording) when clicking on a number if there are enough flags around it.
 
 ---
 
 ## 5. Game Engine (Backend Design Patterns)
 
-Щоб легко додавати нові режими (PvP, Co-op, Solo), використовуємо патерн **Strategy**.
+To easily support different modes (PvP Speedrun, Co-op, Solo), game logic is governed by the **Strategy** pattern.
 
 ```csharp
-// Інтерфейс, який реалізують різні режими гри
-public interface IGameModeStrategy 
-{
-    void HandleClick(GameSession session, Player player, int x, int y);
-    bool CheckWinCondition(GameSession session);
-}
-
-// Приклад реалізації PvP на швидкість з двома однаковими дошками
-public class PvpSpeedrunStrategy : IGameModeStrategy 
-{
-    public void HandleClick(GameSession session, Player player, int x, int y) 
+    // Interface implemented by different game modes
+    public interface IGameModeStrategy 
     {
-        // Логіка перевірки міни, нарахування штрафу (Freeze), 
-        // та оновлення персональної дошки гравця
+        void HandleReveal(GameState session, string connectionId, int cellIndex);
+        void HandleFlag(GameState session, string connectionId, int cellIndex);
+        bool CheckWinCondition(GameState session);
     }
-    // ...
-}
+
+    // Co-op Implementation (Shared board)
+    public class CoOpStrategy : IGameModeStrategy { /* Players share a single board state */ }
+
+    // PvP Implementation (Separate boards)
+    public class PvpSpeedrunStrategy : IGameModeStrategy { /* Each player has their own RevealedCells array */ }
 ```
 
 ---
 
-## 6. Development Roadmap (Покроковий план)
+## 6. Development Roadmap
 
-* **Phase 1: Foundation (База)**
-    * Створення Entity Framework моделей (User, MatchHistory, Leaderboard).
-    * Налаштування міграцій та підключення до PostgreSQL через Docker.
-    * Реалізація створення тимчасового "Гостя" (Minimal API endpoint: `POST /api/auth/guest`).
-* **Phase 2: The Lobby (Реал-тайм підключення)**
-    * Налаштування SignalR у .NET.
-    * Створення контексту в React для тримання підключення.
-    * Виведення списку онлайн-гравців та реалізація механіки "Відправити інвайт / Прийняти інвайт".
-* **Phase 3: Solo Engine & Leaderboard**
-    * Реалізація генератора дошки (C# алгоритм розстановки мін та підрахунку сусідів).
-    * Створення `SoloStrategy` (одна помилка = програш).
-    * React-компонент ігрового поля (малювання сітки).
-    * Запис результатів у таблицю `SoloLeaderboard` та виведення її на клієнті.
-* **Phase 4: PvP Multiplayer**
-    * Реалізація `PvpSpeedrunStrategy`.
-    * Підтримка налаштувань кімнати (Freeze Timer vs Instant Death).
-    * Синхронізація прогресу суперника (наприклад, маленький прогрес-бар "Суперник відкрив 40/100 клітинок").
-    * Запис результатів у `MatchHistory`.
-* **Phase 5: JWT Authentication**
-    * Додавання `PasswordHash` до користувачів.
-    * Ендпоінти `/register` та `/login`.
-    * Заміна тимчасових гостьових сесій на захищені JWT-токени (передача токена при підключенні до SignalR).
-
----
+* **Phase 1: Foundation — [DONE]**
+    * Create EF models (User).
+    * Set up migrations and PostgreSQL DB (Docker).
+    * Create a temporary "Guest" entity (POST `/api/auth/guest`).
+* **Phase 2: The Lobby (Real-time Connectivity) — [DONE]**
+    * Configure SignalR in .NET.
+    * Create the `useLobby` hook in React (with auto-reconnect).
+    * Display online players list and implement invite mechanics.
+* **Phase 3: Core Game Mechanics — [IN PROGRESS]**
+    * Render the game grid (Vertical Architecture: `features/game`).
+    * Implement "Safe First Click" board generation.
+    * Backend recursive reveal (Flood Fill) and flag synchronization.
+    * Frontend Chording logic (quick reveal).
+* **Phase 4: Game Modes — [NEXT]**
+    * Lobby UI: mode selection (Co-op or PvP) before sending an invite.
+    * Refactor backend to utilize the `IGameModeStrategy` pattern.
+    * Implement logic for 2 independent boards for PvP (including opponent progress tracking).
+* **Phase 5: Persistence & Leaderboards**
+    * Connect the database to save match results (`MatchHistory`).
+    * Add a "Play Solo" button in the lobby.
+    * Write results to the `SoloLeaderboard` table and display it on the client.
+* **Phase 6: JWT Authentication & Polish**
+    * Add `PasswordHash` to users.
+    * Create `/register` and `/login` endpoints.
+    * Replace temporary guest sessions with secure JWT tokens.

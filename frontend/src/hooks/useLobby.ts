@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+// src/hooks/useLobby.ts
+import { useEffect, useState } from 'react';
 import * as signalR from '@microsoft/signalr';
 
 export interface PlayerData {
@@ -10,64 +11,88 @@ export interface PlayerData {
 export interface Challenge {
     challengerName: string;
     challengerConnectionId: string;
+    mode: string; // NEW
+}
+
+export interface GameInfo {
+    mode: "Solo" | "CoOp" | "PvP";
+    matchId: string;
+    rows: number;
+    cols: number;
 }
 
 export const useLobby = (username: string | null, userId: string | null) => {
-    const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+    const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
+
+    const [activeGame, setActiveGame] = useState<GameInfo | null>(null);
     const [players, setPlayers] = useState<PlayerData[]>([]);
     const [incomingChallenge, setIncomingChallenge] = useState<Challenge | null>(null);
-    const connectionRef = useRef<signalR.HubConnection | null>(null);
+
 
     useEffect(() => {
         if (!username || !userId) return;
 
-        const connection = new signalR.HubConnectionBuilder()
+        const newConnection = new signalR.HubConnectionBuilder()
             .withUrl("https://localhost:7244/gamehub")
             .withAutomaticReconnect()
             .build();
 
-        connectionRef.current = connection;
-
-        connection.onreconnected(() => {
-            connection.invoke("JoinLobby", username, userId)
+        newConnection.onreconnected(() => {
+            newConnection.invoke("JoinLobby", username, userId)
                 .catch(e => console.error("Rejoin error: ", e));
         });
 
-        connection.start()
-            .then(() => {
-                connection.invoke("JoinLobby", username, userId)
-                    .catch(e => console.error("JoinLobby error: ", e));
-            })
-            .catch(e => console.error("Connection failed: ", e));
-
-        connection.on("LobbyUpdated", (onlinePlayers: PlayerData[]) => {
+        // --- ДОДАЄМО ПОДІЇ ДО СТАРТУ ---
+        newConnection.on("LobbyUpdated", (onlinePlayers: PlayerData[]) => {
             setPlayers(onlinePlayers);
         });
 
-        connection.on("ChallengeReceived", (challengerName: string, challengerConnectionId: string) => {
-            setIncomingChallenge({ challengerName, challengerConnectionId });
+        newConnection.on("ChallengeReceived", (challengerName: string, challengerConnectionId: string, mode: string) => {
+            setIncomingChallenge({ challengerName, challengerConnectionId, mode });
         });
 
-        connection.on("GameStarted", (matchId: string) => {
-            setActiveMatchId(matchId);
+        newConnection.on("GameStarted", (info: GameInfo) => {
+            setActiveGame(info);
             setIncomingChallenge(null);
         });
+
+        // --- СТАРТУЄМО З'ЄДНАННЯ ---
+        newConnection.start()
+            .then(() => {
+                newConnection.invoke("JoinLobby", username, userId)
+                    .catch(e => console.error("JoinLobby error: ", e));
+
+                // ✅ ВИПРАВЛЕННЯ: Встановлюємо стейт тут (асинхронно)
+                setConnection(newConnection);
+            })
+            .catch(e => console.error("Connection failed: ", e));
+
         return () => {
-            connection.stop().catch(e => console.error("Stop error: ", e));
-            connectionRef.current = null;
+            newConnection.stop().catch(e => console.error("Stop error: ", e));
         };
     }, [username, userId]);
 
-    const sendChallenge = (targetConnectionId: string) => {
-        connectionRef.current?.invoke("ChallengePlayer", targetConnectionId)
-            .catch(e => console.error("Challenge error: ", e));
+    // --- ACTIONS ---
+    const sendChallenge = (targetConnectionId: string, mode: string) => {
+        connection?.invoke("ChallengePlayer", targetConnectionId, mode).catch(console.error);
     };
 
-    const acceptChallenge = (challengerConnectionId: string) => {
-        connectionRef.current?.invoke("AcceptChallenge", challengerConnectionId)
-            .catch(e => console.error("Accept error: ", e));
+    const acceptChallenge = (challengerConnectionId: string, mode: string) => {
+        connection?.invoke("AcceptChallenge", challengerConnectionId, mode).catch(console.error);
     };
+
     const clearChallenge = () => setIncomingChallenge(null);
-
-    return { players, incomingChallenge, sendChallenge, clearChallenge, acceptChallenge, activeMatchId };
+    const clearActiveGame = () => {
+        setActiveGame(null);
+    };
+    return {
+        connection, // <-- ТЕПЕР CONNECTION ЕКСПОРТУЄТЬСЯ
+        players,
+        incomingChallenge,
+        sendChallenge,
+        clearChallenge,
+        acceptChallenge,
+        activeGame,
+        clearActiveGame
+    };
 };

@@ -1,16 +1,29 @@
 import { useLobby } from '../../hooks/useLobby';
 import { GameScreen } from '../game/GameScreen';
-import type {User} from '../../types';
+import { useState } from 'react';
+import type { User } from '../../types';
 
 interface LobbyScreenProps {
     user: User;
 }
 
 export const LobbyScreen = ({ user }: LobbyScreenProps) => {
-    const { players, incomingChallenge, sendChallenge, clearChallenge, acceptChallenge, activeMatchId } = useLobby(user.username, user.id);
+    const { players, incomingChallenge, sendChallenge, clearChallenge, acceptChallenge, activeGame, connection, clearActiveGame } = useLobby(user.username, user.id);
 
-    if (activeMatchId) {
-        return <GameScreen matchId={activeMatchId} user={user} />;
+    const [selectedMode, setSelectedMode] = useState<"PvP" | "CoOp">("PvP");
+
+    if (activeGame) {
+        return (
+            <GameScreen
+                connection={connection}
+                matchId={activeGame.matchId}
+                user={user}
+                mode={activeGame.mode as "Solo" | "CoOp" | "PvP"} // Pass dynamic mode
+                width={activeGame.cols || 16}
+                height={activeGame.rows || 16}
+                onLeave={clearActiveGame}
+            />
+        );
     }
 
     return (
@@ -18,28 +31,35 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
             <div className="max-w-2xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold">Lobby</h1>
-                    <span className="bg-black-100 text-blue-800 px-3 py-1 rounded-full font-medium">
-                        You: {user.username}
-                    </span>
+                    <span className="bg-black-100 text-blue-800 px-3 py-1 rounded-full font-medium">You: {user.username}</span>
+                </div>
+
+                {/* NEW: Mode Selector */}
+                <div className="bg-black p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex gap-4 items-center">
+                    <span className="font-bold">Select Mode:</span>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="mode" value="PvP" checked={selectedMode === "PvP"} onChange={() => setSelectedMode("PvP")} />
+                        PvP Speedrun
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="mode" value="CoOp" checked={selectedMode === "CoOp"} onChange={() => setSelectedMode("CoOp")} />
+                        Co-Op
+                    </label>
                 </div>
 
                 <div className="bg-black p-6 rounded-xl shadow-sm border border-gray-200">
-                    <h2 className="text-xl font-semibold mb-4 border-b pb-2">
-                        Players Online ({players.length})
-                    </h2>
+                    <h2 className="text-xl font-semibold mb-4 border-b pb-2">Players Online ({players.length})</h2>
                     {players.length === 0 ? (
                         <p className="text-gray-500">Waiting for players...</p>
                     ) : (
                         <ul className="space-y-3">
                             {players.map(player => (
                                 <li key={player.connectionId} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg transition-colors">
-                                    <span className="font-medium">
-                                        {player.username} {player.userId === user.id && "(You)"}
-                                    </span>
-
+                                    <span className="font-medium">{player.username} {player.userId === user.id && "(You)"}</span>
                                     {player.userId !== user.id && (
                                         <button
-                                            onClick={() => sendChallenge(player.connectionId)}
+                                            // Pass selectedMode here
+                                            onClick={() => sendChallenge(player.connectionId, selectedMode)}
                                             className="px-4 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors cursor-pointer"
                                         >
                                             Challenge
@@ -55,26 +75,16 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
             {/* Challenge Alert Modal */}
             {incomingChallenge && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-                    <div
-                        className="bg-white p-6 rounded-xl shadow-lg text-center"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="challenge-title"
-                        aria-describedby="challenge-desc"
-                    >
-                        <h3 id="challenge-title" className="text-2xl font-bold mb-2">⚔️ New Challenge!</h3>
-                        <p id="challenge-desc" className="mb-6 font-medium text-gray-700">
-                            <span className="text-blue-600">{incomingChallenge.challengerName}</span> wants to play!
+                    <div className="bg-white p-6 rounded-xl shadow-lg text-center">
+                        <h3 className="text-2xl font-bold mb-2">⚔️ New {incomingChallenge.mode} Challenge!</h3>
+                        <p className="mb-6 font-medium text-gray-700">
+                            <span className="text-blue-600">{incomingChallenge.challengerName}</span> wants to play <span className="font-bold">{incomingChallenge.mode}</span>!
                         </p>
                         <div className="flex gap-4 justify-center">
+                            <button onClick={clearChallenge} className="px-6 py-2 bg-red-500 text-white rounded font-semibold hover:bg-red-600 cursor-pointer">Decline</button>
                             <button
-                                onClick={clearChallenge}
-                                className="px-6 py-2 bg-red-500 text-white rounded font-semibold hover:bg-red-600 cursor-pointer"
-                            >
-                                Decline
-                            </button>
-                            <button
-                                onClick={() => acceptChallenge(incomingChallenge.challengerConnectionId)}
+                                // Pass mode here
+                                onClick={() => acceptChallenge(incomingChallenge.challengerConnectionId, incomingChallenge.mode)}
                                 className="px-6 py-2 bg-blue-500 text-white rounded font-semibold hover:bg-blue-600 cursor-pointer"
                             >
                                 Accept
