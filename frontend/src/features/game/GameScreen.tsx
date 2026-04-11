@@ -40,6 +40,7 @@ export function GameScreen({ connection, matchId, user, mode, width, height, onL
             </div>
 
             <GameBoard
+                key={matchId}
                 connection={connection}
                 matchId={matchId}
                 width={width}

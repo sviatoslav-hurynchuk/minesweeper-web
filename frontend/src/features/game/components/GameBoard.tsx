@@ -66,12 +66,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
         }
     };
 
+    const finalMinesSet = React.useMemo(() => new Set(finalMines), [finalMines]);
+
+    const numberColors = ["", "text-blue-500", "text-green-500", "text-red-500", "text-purple-500", "text-yellow-600", "text-cyan-500", "text-black", "text-gray-600"];
+
     const cells = [];
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
             const index = y * width + x;
             const cell = revealedCells[index];
-            const isMine = finalMines.includes(index);
+            const isMine = finalMinesSet.has(index);
             const isFlagged = flaggedCells.has(index);
 
             cells.push(
@@ -91,7 +95,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
                     }}
                 >
                     {cell && cell.adjacentMines > 0 ? (
-                        <span className={`text-minesweeper-${cell.adjacentMines}`}>{cell.adjacentMines}</span>
+                        <span className={numberColors[cell.adjacentMines]}>
+                        {cell.adjacentMines}
+                        </span>
                     ) : ''}
                     {isMine && !isFlagged ? '💣' : ''}
                     {isFlagged ? '🚩' : ''}
