@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { HubConnection } from '@microsoft/signalr';
 import { useGameEngine } from '../../../hooks/useGameEngine';
 
@@ -8,15 +8,13 @@ interface GameBoardProps {
     width: number;
     height: number;
     onLeave: () => void;
-    mode: "Solo" | "CoOp" | "PvP"; // 1. ДОДАЛИ ПРОПС РЕЖИМУ
+    mode: "Solo" | "CoOp" | "PvP";
 }
 
 const getNeighbors = (index: number, width: number, height: number) => {
-    // ... (код getNeighbors залишається без змін)
     const r = Math.floor(index / width);
     const c = index % width;
     const res: number[] = [];
-
     for (let i = -1; i <= 1; i++) {
         for (let j = -1; j <= 1; j++) {
             if (i === 0 && j === 0) continue;
@@ -31,43 +29,36 @@ const getNeighbors = (index: number, width: number, height: number) => {
 
 export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width, height, onLeave, mode }) => {
     const {
-        revealedCells,
-        flaggedCells,
-        gameStatus,
-        finalMines,
-        isFrozen,
-        freezeTimer,
-        revealCell,
-        toggleFlag,
-        playerProgress,
-        opponentProgress // 2. ДІСТАЛИ ПРОГРЕС СУПЕРНИКА З ХУКА
+        revealedCells, flaggedCells, gameStatus, finalMines,
+        isFrozen, freezeTimer, revealCell, toggleFlag,
+        playerProgress, opponentProgress
     } = useGameEngine(connection, matchId);
 
+    const [clickMode, setClickMode] = useState<"reveal" | "flag">("reveal");
+
     const handleCellClick = (index: number, x: number, y: number) => {
-        // ... (код handleCellClick залишається без змін)
         const cell = revealedCells[index];
         if (cell && cell.adjacentMines > 0) {
             const neighbors = getNeighbors(index, width, height);
             let flaggedNeighborsCount = 0;
-            neighbors.forEach(n => {
-                if (flaggedCells.has(n)) flaggedNeighborsCount++;
-            });
+            neighbors.forEach(n => { if (flaggedCells.has(n)) flaggedNeighborsCount++; });
+
             if (flaggedNeighborsCount === cell.adjacentMines) {
                 neighbors.forEach(n => {
                     if (!revealedCells[n] && !flaggedCells.has(n)) {
                         const nx = n % width;
                         const ny = Math.floor(n / width);
-                        revealCell(nx, ny);
+                        revealCell(nx, ny).catch();
                     }
                 });
             }
-        } else if (!cell && !flaggedCells.has(index)) {
-            revealCell(x, y);
+        } else if (!cell) {
+            if (clickMode === "flag") toggleFlag(index).catch(console.error);
+            else if (!flaggedCells.has(index)) revealCell(x, y).catch(console.error);
         }
     };
 
     const finalMinesSet = React.useMemo(() => new Set(finalMines), [finalMines]);
-
     const numberColors = ["", "text-blue-500", "text-green-500", "text-red-500", "text-purple-500", "text-yellow-600", "text-cyan-500", "text-black", "text-gray-600"];
 
     const cells = [];
@@ -82,23 +73,17 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
                 <div
                     key={index}
                     className={`
-                        w-10 h-10 flex items-center justify-center font-bold text-lg select-none rounded-sm transition-all
+                        w-[40px] h-[40px] flex-shrink-0 flex items-center justify-center font-bold text-lg select-none rounded-sm transition-all
                         ${cell ? 'text-black bg-gray-200 border-none' : 'bg-gray-400 hover:bg-gray-300 border-b-4 border-gray-500 cursor-pointer active:border-b-0 active:translate-y-1'}
                         ${isMine && !isFlagged ? 'bg-red-500 border-none' : ''}
                     `}
                     onClick={() => handleCellClick(index, x, y)}
                     onContextMenu={(e) => {
                         e.preventDefault();
-                        if (!cell) {
-                            toggleFlag(index).catch();
-                        }
+                        if (!cell) toggleFlag(index).catch(console.error);
                     }}
                 >
-                    {cell && cell.adjacentMines > 0 ? (
-                        <span className={numberColors[cell.adjacentMines]}>
-                        {cell.adjacentMines}
-                        </span>
-                    ) : ''}
+                    {cell && cell.adjacentMines > 0 ? <span className={numberColors[cell.adjacentMines]}>{cell.adjacentMines}</span> : ''}
                     {isMine && !isFlagged ? '💣' : ''}
                     {isFlagged ? '🚩' : ''}
                 </div>
@@ -107,74 +92,77 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
     }
 
     return (
-        <div className="relative inline-block p-4 bg-gray-800 border-4 border-gray-700 rounded-xl shadow-2xl z-0">
+        // ✅ ФІКС 3: Додано h-full
+        <div className="flex flex-col xl:flex-row items-center xl:items-start justify-center w-full max-w-full h-full px-2 gap-4 xl:gap-8">
 
-            {/* 3. ДОДАЛИ БЛОК ШКАЛИ (Показується тільки якщо режим PvP) */}
+            {/* 1. БЛОК ШКАЛИ PvP */}
             {mode === "PvP" && (
-                <div className="mb-4 bg-gray-900 p-4 rounded-lg border border-gray-700 shadow-inner flex flex-col gap-3">
-
-                    {/* Твоя шкала (Синя) */}
+                <div className="order-1 xl:order-none w-full max-w-sm xl:w-72 flex-shrink-0 bg-gray-900 p-4 xl:p-5 rounded-xl border-2 border-gray-700 shadow-xl flex flex-col gap-4 xl:gap-6 xl:mt-2">
+                    <h3 className="text-lg xl:text-xl font-black text-white text-center border-b border-gray-700 pb-2 xl:pb-3 tracking-wide">⚔️ MATCH STATS</h3>
                     <div>
-                        <div className="flex justify-between text-xs font-bold mb-1">
+                        <div className="flex justify-between text-xs xl:text-sm font-bold mb-1 xl:mb-2">
                             <span className="text-blue-400">My Progress</span>
                             <span className="text-gray-300">{Math.round(playerProgress)}%</span>
                         </div>
-                        <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
-                            <div
-                                className="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out"
-                                style={{ width: `${playerProgress}%` }}
-                            ></div>
+                        <div className="w-full bg-gray-800 rounded-full h-3 xl:h-4 overflow-hidden shadow-inner border border-gray-700">
+                            <div className="bg-blue-500 h-full rounded-full transition-all duration-500 ease-out relative" style={{ width: `${playerProgress}%` }}>
+                                <div className="absolute top-0 left-0 right-0 h-1 bg-white opacity-20"></div>
+                            </div>
                         </div>
                     </div>
-
-                    {/* Шкала суперника (Червона) */}
                     <div>
-                        <div className="flex justify-between text-xs font-bold mb-1">
+                        <div className="flex justify-between text-xs xl:text-sm font-bold mb-1 xl:mb-2">
                             <span className="text-red-400">Opponent Progress</span>
                             <span className="text-gray-300">{Math.round(opponentProgress)}%</span>
                         </div>
-                        <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
-                            <div
-                                className="bg-red-500 h-2 rounded-full transition-all duration-500 ease-out"
-                                style={{ width: `${opponentProgress}%` }}
-                            ></div>
+                        <div className="w-full bg-gray-800 rounded-full h-3 xl:h-4 overflow-hidden shadow-inner border border-gray-700">
+                            <div className="bg-red-500 h-full rounded-full transition-all duration-500 ease-out relative" style={{ width: `${opponentProgress}%` }}>
+                                <div className="absolute top-0 left-0 right-0 h-1 bg-white opacity-20"></div>
+                            </div>
                         </div>
                     </div>
-
                 </div>
             )}
 
-            {/* Grid Container */}
-            <div className="grid gap-1 bg-gray-800" style={{ gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))` }} onContextMenu={(e) => e.preventDefault()}>
-                {cells}
+            {/* 2. ІГРОВЕ ПОЛЕ */}
+            {/* ✅ ФІКС 4: Додано h-full для обмеження висоти контейнера поля */}
+            <div className="order-2 xl:order-none relative bg-gray-800 border-4 border-gray-700 rounded-xl shadow-2xl z-0 max-w-full overflow-hidden flex flex-col h-full xl:max-h-[85vh]">
+
+                {/* ✅ ФІКС 5: Змінено на h-full. Якщо дошка не влазить - буде працювати її внутрішній скрол */}
+                <div className="p-2 md:p-6 overflow-auto touch-pan-x touch-pan-y h-full custom-scrollbar">
+                    <div
+                        className="grid gap-1 bg-gray-800 w-max mx-auto shadow-inner"
+                        style={{ gridTemplateColumns: `repeat(${width}, 40px)`, gridTemplateRows: `repeat(${height}, 40px)` }}
+                        onContextMenu={(e) => e.preventDefault()}
+                    >
+                        {cells}
+                    </div>
+                </div>
+
+                {/* Overlays */}
+                {gameStatus !== "Playing" && (
+                    <div className="absolute inset-0 z-10 bg-black/70 flex items-center justify-center backdrop-blur-md">
+                        <div className="bg-gray-800 p-8 md:p-10 rounded-2xl shadow-2xl text-center border-2 border-gray-600">
+                            <h2 className="text-4xl md:text-5xl font-black mb-6 text-white">{gameStatus === "Victory" ? "🎉 YOU WON!" : "💀 BOOM!"}</h2>
+                            <button onClick={onLeave} className="bg-blue-600 hover:bg-blue-500 text-white font-black py-4 px-10 rounded-xl">Back to Lobby</button>
+                        </div>
+                    </div>
+                )}
+                {isFrozen && (
+                    <div className="absolute inset-0 z-10 bg-red-900/80 flex items-center justify-center backdrop-blur-md">
+                        <div className="text-center text-white">
+                            <h2 className="text-3xl md:text-4xl font-black mb-4 uppercase text-red-200">Penalty Freeze!</h2>
+                            <span className="text-7xl md:text-9xl font-black">{freezeTimer}</span>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {/* Overlay: Game Over */}
-            {gameStatus !== "Playing" && (
-                <div className="absolute inset-0 z-10 bg-black/60 flex items-center justify-center backdrop-blur-sm rounded-lg">
-                    <div className="bg-gray-800 p-8 rounded-xl shadow-2xl text-center border-2 border-gray-600 transform transition-all scale-105">
-                        <h2 className="text-4xl font-black mb-4 tracking-tight text-white">
-                            {gameStatus === "Victory" ? "🎉 YOU WON!" : "💀 BOOM!"}
-                        </h2>
-                        <button
-                            onClick={onLeave}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-colors"
-                        >
-                            Back to Lobby
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Overlay: Penalty Freeze (PvP Only) */}
-            {isFrozen && (
-                <div className="absolute inset-0 z-10 bg-red-900/80 flex items-center justify-center backdrop-blur-md rounded-lg">
-                    <div className="text-center text-white">
-                        <h2 className="text-3xl font-bold mb-2">Penalty Freeze!</h2>
-                        <span className="text-7xl font-black shadow-black drop-shadow-lg">{freezeTimer}s</span>
-                    </div>
-                </div>
-            )}
+            {/* 3. МОБІЛЬНИЙ ПЕРЕМИКАЧ */}
+            <div className="order-3 xl:hidden mt-2 flex bg-gray-900 rounded-xl p-1.5 border-2 border-gray-700 shadow-lg shrink-0">
+                <button onClick={() => setClickMode("reveal")} className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold text-sm w-36 ${clickMode === "reveal" ? "bg-blue-600 text-white" : "text-gray-400"}`}>⛏️ Відкрити</button>
+                <button onClick={() => setClickMode("flag")} className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold text-sm w-36 ${clickMode === "flag" ? "bg-red-600 text-white" : "text-gray-400"}`}>🚩 Прапорець</button>
+            </div>
         </div>
     );
 };

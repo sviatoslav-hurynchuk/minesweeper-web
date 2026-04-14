@@ -64,6 +64,7 @@ The application uses a single main hub — `GameHub`, which manages the Lobby an
 * **Safe First Click:** Mines are generated (`GenerateSafeBoard`) only during the player's first click to guarantee a safe starting zone (in PvP, the exact same matrix is generated for both players).
 * **Flood Fill:** Clicking on an empty cell recursively reveals all adjacent empty zones on the backend.
 * **Chording:** The frontend supports quickly revealing cells (Chording) when clicking on a number if there are enough flags around it.
+* **Optimistic Updates:** Flag placements are handled optimistically on the client to ensure zero perceived latency, with a robust server rollback mechanism on failure.
 
 ---
 
@@ -75,16 +76,20 @@ To easily support different modes (PvP Speedrun, Co-op, Solo), game logic is gov
     // Interface implemented by different game modes
     public interface IGameModeStrategy 
     {
-        void HandleReveal(GameState session, string connectionId, int cellIndex);
-        void HandleFlag(GameState session, string connectionId, int cellIndex);
-        bool CheckWinCondition(GameState session);
+        void InitializeGame(GameState session, int width, int height, int minesCount);
+        
+        Task HandleRevealAsync(GameState session, string connectionId, int x, int y, 
+            IClientProxy clientProxy, IClientProxy opponentProxy, IClientProxy groupProxy);
     }
 
+    // Solo Implementation (Standard independent board)
+    public class SoloStrategy : IGameModeStrategy { /* Single player state tracking */ }
+
     // Co-op Implementation (Shared board)
-    public class CoOpStrategy : IGameModeStrategy { /* Players share a single board state */ }
+    public class CoOpStrategy : IGameModeStrategy { /* Uses thread-safe locks for shared board mutations */ }
 
     // PvP Implementation (Separate boards)
-    public class PvpSpeedrunStrategy : IGameModeStrategy { /* Each player has their own RevealedCells array */ }
+    public class PvpSpeedrunStrategy : IGameModeStrategy { /* Tracks individual progress and penalty timers */ }
 ```
 
 ---
@@ -99,18 +104,18 @@ To easily support different modes (PvP Speedrun, Co-op, Solo), game logic is gov
     * Configure SignalR in .NET.
     * Create the `useLobby` hook in React (with auto-reconnect).
     * Display online players list and implement invite mechanics.
-* **Phase 3: Core Game Mechanics — [IN PROGRESS]**
+* **Phase 3: Core Game Mechanics — [DONE]**
     * Render the game grid (Vertical Architecture: `features/game`).
     * Implement "Safe First Click" board generation.
     * Backend recursive reveal (Flood Fill) and flag synchronization.
     * Frontend Chording logic (quick reveal).
-* **Phase 4: Game Modes — [NEXT]**
-    * Lobby UI: mode selection (Co-op or PvP) before sending an invite.
+* **Phase 4: Game Modes — [DONE]**
+    * Lobby UI: mode selection (Solo, Co-op, PvP) before sending an invite.
     * Refactor backend to utilize the `IGameModeStrategy` pattern.
     * Implement logic for 2 independent boards for PvP (including opponent progress tracking).
-* **Phase 5: Persistence & Leaderboards**
+    * Implement freeze penalty mechanics and rollback handling.
+* **Phase 5: Persistence & Leaderboards — [NEXT]**
     * Connect the database to save match results (`MatchHistory`).
-    * Add a "Play Solo" button in the lobby.
     * Write results to the `SoloLeaderboard` table and display it on the client.
 * **Phase 6: JWT Authentication & Polish**
     * Add `PasswordHash` to users.

@@ -27,8 +27,8 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
     }
 
     return (
-        <div className="p-8 font-sans bg-black-50 min-h-screen relative">
-            <div className="max-w-2xl mx-auto">
+        <div className="flex flex-col items-center min-h-screen bg-gray-900 text-white w-full">
+            <div className="max-w-2xl mx-auto mt-8">
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold">Lobby</h1>
                     <span className="bg-black-100 text-blue-800 px-3 py-1 rounded-full font-medium">You: {user.username}</span>

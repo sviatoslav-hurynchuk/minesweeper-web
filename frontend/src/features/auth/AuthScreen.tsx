@@ -5,7 +5,7 @@ interface AuthScreenProps {
     onLogin: (user: User) => void;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://localhost:7244";
+//const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://localhost:7244";
 
 export const AuthScreen = ({ onLogin }: AuthScreenProps) => {
     const [isLoading, setIsLoading] = useState(false);
@@ -13,7 +13,8 @@ export const AuthScreen = ({ onLogin }: AuthScreenProps) => {
     const handleGuestLogin = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/api/auth/guest`, {
+            /*const response = await fetch(`${API_BASE_URL}/api/auth/guest`, */// МАЄ БУТИ (заміни на свій IP):
+            const response = await fetch("http://192.168.1.100:5244/api/auth/guest", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: "" })
