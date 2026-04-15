@@ -14,7 +14,7 @@ export const AuthScreen = ({ onLogin }: AuthScreenProps) => {
         setIsLoading(true);
         try {
             /*const response = await fetch(`${API_BASE_URL}/api/auth/guest`, */// МАЄ БУТИ (заміни на свій IP):
-            const response = await fetch("http://192.168.1.100:5244/api/auth/guest", {
+            const response = await fetch("http://192.168.171.101:5244/api/auth/guest", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: "" })

@@ -11,7 +11,7 @@ export interface PlayerData {
 export interface Challenge {
     challengerName: string;
     challengerConnectionId: string;
-    mode: string; // NEW
+    mode: string;
 }
 
 export interface GameInfo {
@@ -27,13 +27,13 @@ export const useLobby = (username: string | null, userId: string | null) => {
     const [activeGame, setActiveGame] = useState<GameInfo | null>(null);
     const [players, setPlayers] = useState<PlayerData[]>([]);
     const [incomingChallenge, setIncomingChallenge] = useState<Challenge | null>(null);
-
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     useEffect(() => {
         if (!username || !userId) return;
 
         const newConnection = new signalR.HubConnectionBuilder()
-            .withUrl("http://192.168.1.100:5244/gamehub")
+            .withUrl("http://192.168.171.101:5244/gamehub")
             .withAutomaticReconnect()
             .build();
 
@@ -54,6 +54,14 @@ export const useLobby = (username: string | null, userId: string | null) => {
         newConnection.on("GameStarted", (info: GameInfo) => {
             setActiveGame(info);
             setIncomingChallenge(null);
+            setErrorMessage(null); // Очищаємо помилки при успішному старті
+        });
+
+        // ✅ НОВЕ: Слухаємо помилки від сервера (наприклад, якщо опонент вже грає)
+        newConnection.on("ErrorMessage", (message: string) => {
+            alert(message); // Виводимо алерт (можеш замінити на красивий тост у UI)
+            setErrorMessage(message);
+            setIncomingChallenge(null); // Скидаємо виклик, бо він більше неактуальний
         });
 
         // --- СТАРТУЄМО З'ЄДНАННЯ ---
@@ -62,12 +70,16 @@ export const useLobby = (username: string | null, userId: string | null) => {
                 newConnection.invoke("JoinLobby", username, userId)
                     .catch(e => console.error("JoinLobby error: ", e));
 
-                // ✅ ВИПРАВЛЕННЯ: Встановлюємо стейт тут (асинхронно)
                 setConnection(newConnection);
             })
             .catch(e => console.error("Connection failed: ", e));
 
         return () => {
+            // ✅ Не забуваємо відписуватись від подій
+            newConnection.off("LobbyUpdated");
+            newConnection.off("ChallengeReceived");
+            newConnection.off("GameStarted");
+            newConnection.off("ErrorMessage");
             newConnection.stop().catch(e => console.error("Stop error: ", e));
         };
     }, [username, userId]);
@@ -81,18 +93,28 @@ export const useLobby = (username: string | null, userId: string | null) => {
         connection?.invoke("AcceptChallenge", challengerConnectionId, mode).catch(console.error);
     };
 
-    const clearChallenge = () => setIncomingChallenge(null);
-    const clearActiveGame = () => {
-        setActiveGame(null);
+    const startSoloGame = (width: number, height: number, minesCount: number) => {
+        if (!connection) return;
+
+        connection.invoke("StartSoloMatch", width, height, minesCount)
+            .catch(err => console.error("Failed to start solo match:", err));
     };
+
+    const clearChallenge = () => setIncomingChallenge(null);
+    const clearActiveGame = () => setActiveGame(null);
+    const clearErrorMessage = () => setErrorMessage(null); // Додано для зручності
+
     return {
-        connection, // <-- ТЕПЕР CONNECTION ЕКСПОРТУЄТЬСЯ
+        connection,
         players,
         incomingChallenge,
+        errorMessage, // Експортуємо повідомлення про помилку
         sendChallenge,
         clearChallenge,
         acceptChallenge,
         activeGame,
-        clearActiveGame
+        clearActiveGame,
+        startSoloGame,
+        clearErrorMessage
     };
 };

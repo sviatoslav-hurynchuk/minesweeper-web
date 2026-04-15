@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { HubConnection } from '@microsoft/signalr';
-import { useGameEngine } from '../../../hooks/useGameEngine';
+import React, {useState} from 'react';
+import {HubConnection} from '@microsoft/signalr';
+import {useGameEngine} from '../../../hooks/useGameEngine';
 
 interface GameBoardProps {
     connection: HubConnection | null;
@@ -27,21 +27,26 @@ const getNeighbors = (index: number, width: number, height: number) => {
     return res;
 };
 
-export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width, height, onLeave, mode }) => {
+export const GameBoard: React.FC<GameBoardProps> = ({connection, matchId, width, height, onLeave, mode}) => {
     const {
         revealedCells, flaggedCells, gameStatus, finalMines,
         isFrozen, freezeTimer, revealCell, toggleFlag,
-        playerProgress, opponentProgress
+        playerProgress, opponentProgress, opponentCursor, sendCursorMove
     } = useGameEngine(connection, matchId);
 
     const [clickMode, setClickMode] = useState<"reveal" | "flag">("reveal");
 
+    // ОБРОБНИК ЛІВОГО КЛІКУ
     const handleCellClick = (index: number, x: number, y: number) => {
         const cell = revealedCells[index];
+
+        // Акорд (Chording) працює завжди
         if (cell && cell.adjacentMines > 0) {
             const neighbors = getNeighbors(index, width, height);
             let flaggedNeighborsCount = 0;
-            neighbors.forEach(n => { if (flaggedCells.has(n)) flaggedNeighborsCount++; });
+            neighbors.forEach(n => {
+                if (flaggedCells.has(n)) flaggedNeighborsCount++;
+            });
 
             if (flaggedNeighborsCount === cell.adjacentMines) {
                 neighbors.forEach(n => {
@@ -53,8 +58,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
                 });
             }
         } else if (!cell) {
-            if (clickMode === "flag") toggleFlag(index).catch(console.error);
-            else if (!flaggedCells.has(index)) revealCell(x, y).catch(console.error);
+            // ЛОГІКА ЛІВОЇ КНОПКИ (залежить від режиму)
+            if (clickMode === "flag") {
+                toggleFlag(index).catch(console.error); // В режимі прапорця ЛКМ ставить прапор
+            } else if (!flaggedCells.has(index)) {
+                revealCell(x, y).catch(console.error);  // В режимі відкриття ЛКМ відкриває
+            }
         }
     };
 
@@ -68,21 +77,43 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
             const cell = revealedCells[index];
             const isMine = finalMinesSet.has(index);
             const isFlagged = flaggedCells.has(index);
-
+            const isOpponentLooking = opponentCursor === index && mode !== "Solo" && mode !== "PvP";
             cells.push(
                 <div
                     key={index}
+                    onMouseEnter={() => sendCursorMove(index)}
+                    onMouseLeave={() => sendCursorMove(null)}
+
+                    // 1. ПОВЕРНУЛИ РІДНІ КЛАСИ КЛІТИНЦІ (transition-all без затримок)
                     className={`
-                        w-[40px] h-[40px] flex-shrink-0 flex items-center justify-center font-bold text-lg select-none rounded-sm transition-all
+                        w-[40px] h-[40px] flex-shrink-0 flex items-center justify-center font-bold text-lg select-none rounded-sm transition-all relative
                         ${cell ? 'text-black bg-gray-200 border-none' : 'bg-gray-400 hover:bg-gray-300 border-b-4 border-gray-500 cursor-pointer active:border-b-0 active:translate-y-1'}
                         ${isMine && !isFlagged ? 'bg-red-500 border-none' : ''}
                     `}
                     onClick={() => handleCellClick(index, x, y)}
+
+                    // ОБРОБНИК ПРАВОГО КЛІКУ
                     onContextMenu={(e) => {
                         e.preventDefault();
-                        if (!cell) toggleFlag(index).catch(console.error);
+                        if (!cell) {
+                            if (clickMode === "flag") {
+                                if (!flaggedCells.has(index)) revealCell(x, y).catch(console.error);
+                            } else {
+                                toggleFlag(index).catch(console.error);
+                            }
+                        }
                     }}
                 >
+                    {/* 2. ✅ НОВЕ: Окремий невидимий шар ТІЛЬКИ для рамки опонента */}
+                    <div
+                        className={`
+                            absolute inset-0 rounded-sm pointer-events-none z-10
+                            ring-2 ring-red-500 ring-offset-1 ring-offset-gray-800
+                            transition-opacity
+                            ${isOpponentLooking ? 'opacity-100 duration-0' : 'opacity-0 duration-500'}
+                        `}
+                    />
+
                     {cell && cell.adjacentMines > 0 ? <span className={numberColors[cell.adjacentMines]}>{cell.adjacentMines}</span> : ''}
                     {isMine && !isFlagged ? '💣' : ''}
                     {isFlagged ? '🚩' : ''}
@@ -92,20 +123,25 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
     }
 
     return (
-        // ✅ ФІКС 3: Додано h-full
-        <div className="flex flex-col xl:flex-row items-center xl:items-start justify-center w-full max-w-full h-full px-2 gap-4 xl:gap-8">
+        <div
+            className="flex flex-col xl:flex-row items-center xl:items-start justify-center w-full max-w-full h-full px-2 gap-4 xl:gap-8">
 
-            {/* 1. БЛОК ШКАЛИ PvP */}
+            {/* 1. БЛОК ШКАЛИ PvP (Зліва на ПК) */}
             {mode === "PvP" && (
-                <div className="order-1 xl:order-none w-full max-w-sm xl:w-72 flex-shrink-0 bg-gray-900 p-4 xl:p-5 rounded-xl border-2 border-gray-700 shadow-xl flex flex-col gap-4 xl:gap-6 xl:mt-2">
-                    <h3 className="text-lg xl:text-xl font-black text-white text-center border-b border-gray-700 pb-2 xl:pb-3 tracking-wide">⚔️ MATCH STATS</h3>
+                <div
+                    className="order-1 xl:order-1 w-full max-w-sm xl:w-72 flex-shrink-0 bg-gray-900 p-4 xl:p-5 rounded-xl border-2 border-gray-700 shadow-xl flex flex-col gap-4 xl:gap-6 xl:mt-2">
+                    <h3 className="text-lg xl:text-xl font-black text-white text-center border-b border-gray-700 pb-2 xl:pb-3 tracking-wide">⚔️
+                        MATCH STATS</h3>
                     <div>
                         <div className="flex justify-between text-xs xl:text-sm font-bold mb-1 xl:mb-2">
                             <span className="text-blue-400">My Progress</span>
                             <span className="text-gray-300">{Math.round(playerProgress)}%</span>
                         </div>
-                        <div className="w-full bg-gray-800 rounded-full h-3 xl:h-4 overflow-hidden shadow-inner border border-gray-700">
-                            <div className="bg-blue-500 h-full rounded-full transition-all duration-500 ease-out relative" style={{ width: `${playerProgress}%` }}>
+                        <div
+                            className="w-full bg-gray-800 rounded-full h-3 xl:h-4 overflow-hidden shadow-inner border border-gray-700">
+                            <div
+                                className="bg-blue-500 h-full rounded-full transition-all duration-500 ease-out relative"
+                                style={{width: `${playerProgress}%`}}>
                                 <div className="absolute top-0 left-0 right-0 h-1 bg-white opacity-20"></div>
                             </div>
                         </div>
@@ -115,8 +151,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
                             <span className="text-red-400">Opponent Progress</span>
                             <span className="text-gray-300">{Math.round(opponentProgress)}%</span>
                         </div>
-                        <div className="w-full bg-gray-800 rounded-full h-3 xl:h-4 overflow-hidden shadow-inner border border-gray-700">
-                            <div className="bg-red-500 h-full rounded-full transition-all duration-500 ease-out relative" style={{ width: `${opponentProgress}%` }}>
+                        <div
+                            className="w-full bg-gray-800 rounded-full h-3 xl:h-4 overflow-hidden shadow-inner border border-gray-700">
+                            <div
+                                className="bg-red-500 h-full rounded-full transition-all duration-500 ease-out relative"
+                                style={{width: `${opponentProgress}%`}}>
                                 <div className="absolute top-0 left-0 right-0 h-1 bg-white opacity-20"></div>
                             </div>
                         </div>
@@ -124,15 +163,16 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
                 </div>
             )}
 
-            {/* 2. ІГРОВЕ ПОЛЕ */}
-            {/* ✅ ФІКС 4: Додано h-full для обмеження висоти контейнера поля */}
-            <div className="order-2 xl:order-none relative bg-gray-800 border-4 border-gray-700 rounded-xl shadow-2xl z-0 max-w-full overflow-hidden flex flex-col h-full xl:max-h-[85vh]">
-
-                {/* ✅ ФІКС 5: Змінено на h-full. Якщо дошка не влазить - буде працювати її внутрішній скрол */}
+            {/* 2. ІГРОВЕ ПОЛЕ (По центру на ПК) */}
+            <div
+                className="order-2 xl:order-2 relative bg-gray-800 border-4 border-gray-700 rounded-xl shadow-2xl z-0 max-w-full overflow-hidden flex flex-col h-full xl:max-h-[85vh]">
                 <div className="p-2 md:p-6 overflow-auto touch-pan-x touch-pan-y h-full custom-scrollbar">
                     <div
                         className="grid gap-1 bg-gray-800 w-max mx-auto shadow-inner"
-                        style={{ gridTemplateColumns: `repeat(${width}, 40px)`, gridTemplateRows: `repeat(${height}, 40px)` }}
+                        style={{
+                            gridTemplateColumns: `repeat(${width}, 40px)`,
+                            gridTemplateRows: `repeat(${height}, 40px)`
+                        }}
                         onContextMenu={(e) => e.preventDefault()}
                     >
                         {cells}
@@ -141,28 +181,68 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
 
                 {/* Overlays */}
                 {gameStatus !== "Playing" && (
-                    <div className="absolute inset-0 z-10 bg-black/70 flex items-center justify-center backdrop-blur-md">
-                        <div className="bg-gray-800 p-8 md:p-10 rounded-2xl shadow-2xl text-center border-2 border-gray-600">
+                    <div
+                        className="absolute inset-0 z-10 bg-black/70 flex items-center justify-center backdrop-blur-md">
+                        <div
+                            className="bg-gray-800 p-8 md:p-10 rounded-2xl shadow-2xl text-center border-2 border-gray-600">
                             <h2 className="text-4xl md:text-5xl font-black mb-6 text-white">{gameStatus === "Victory" ? "🎉 YOU WON!" : "💀 BOOM!"}</h2>
-                            <button onClick={onLeave} className="bg-blue-600 hover:bg-blue-500 text-white font-black py-4 px-10 rounded-xl">Back to Lobby</button>
+                            <button onClick={onLeave}
+                                    className="bg-blue-600 hover:bg-blue-500 text-white font-black py-4 px-10 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-transform hover:scale-105 uppercase">Back
+                                to Lobby
+                            </button>
                         </div>
                     </div>
                 )}
                 {isFrozen && (
-                    <div className="absolute inset-0 z-10 bg-red-900/80 flex items-center justify-center backdrop-blur-md">
+                    <div
+                        className="absolute inset-0 z-10 bg-red-900/80 flex items-center justify-center backdrop-blur-md">
                         <div className="text-center text-white">
-                            <h2 className="text-3xl md:text-4xl font-black mb-4 uppercase text-red-200">Penalty Freeze!</h2>
+                            <h2 className="text-3xl md:text-4xl font-black mb-4 uppercase text-red-200">Penalty
+                                Freeze!</h2>
                             <span className="text-7xl md:text-9xl font-black">{freezeTimer}</span>
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* 3. МОБІЛЬНИЙ ПЕРЕМИКАЧ */}
-            <div className="order-3 xl:hidden mt-2 flex bg-gray-900 rounded-xl p-1.5 border-2 border-gray-700 shadow-lg shrink-0">
-                <button onClick={() => setClickMode("reveal")} className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold text-sm w-36 ${clickMode === "reveal" ? "bg-blue-600 text-white" : "text-gray-400"}`}>⛏️ Відкрити</button>
-                <button onClick={() => setClickMode("flag")} className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-bold text-sm w-36 ${clickMode === "flag" ? "bg-red-600 text-white" : "text-gray-400"}`}>🚩 Прапорець</button>
+            {/* 3. УНІВЕРСАЛЬНИЙ ПЕРЕМИКАЧ (Справа на ПК, знизу на мобільному) */}
+            {/* ✅ ФІКС: Зняли xl:hidden, додали xl:flex-col. Тепер це вертикальна панелька на ПК і горизонтальна на телефоні */}
+            <div
+                className="order-3 xl:order-3 mt-2 xl:mt-2 flex flex-row xl:flex-col bg-gray-900 rounded-xl p-2 border-2 border-gray-700 shadow-xl shrink-0 gap-2 xl:w-36">
+
+                <button
+                    onClick={() => setClickMode("reveal")}
+                    className={`flex flex-1 xl:flex-none items-center justify-center gap-2 px-4 py-3 xl:py-6 rounded-lg font-bold text-sm xl:text-lg transition-all ${
+                        clickMode === "reveal"
+                            ? "bg-blue-600 text-white shadow-md xl:scale-[1.02]"
+                            : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+                    }`}
+                >
+                    <span className="text-xl">⛏️</span>
+                    <span className="xl:hidden">Відкрити</span>
+                </button>
+
+                <button
+                    onClick={() => setClickMode("flag")}
+                    className={`flex flex-1 xl:flex-none items-center justify-center gap-2 px-4 py-3 xl:py-6 rounded-lg font-bold text-sm xl:text-lg transition-all ${
+                        clickMode === "flag"
+                            ? "bg-red-600 text-white shadow-md xl:scale-[1.02]"
+                            : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+                    }`}
+                >
+                    <span className="text-xl">🚩</span>
+                    <span className="xl:hidden">Прапор</span>
+                </button>
+
+                {/* Підказка для ПК гравців */}
+                <div className="hidden xl:block mt-4 text-center text-xs text-gray-500 font-medium px-2">
+                    {clickMode === "reveal"
+                        ? "ЛКМ: Відкрити\nПКМ: Прапор"
+                        : "ЛКМ: Прапор\nПКМ: Відкрити"
+                    }
+                </div>
             </div>
+
         </div>
     );
 };
