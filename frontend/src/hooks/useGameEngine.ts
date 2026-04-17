@@ -1,5 +1,4 @@
-// src/hooks/useGameEngine.ts
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { HubConnection } from '@microsoft/signalr';
 import type { CellInfo, MatchFinishedPayload } from "../game.types.ts";
 
@@ -9,17 +8,20 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
     const [gameStatus, setGameStatus] = useState<"Playing" | "Victory" | "Defeat">("Playing");
     const [finalMines, setFinalMines] = useState<number[]>([]);
 
-    // NEW: Flagging State (Using a Set for O(1) lookups)
+    // Flagging State & Cursor
     const [flaggedCells, setFlaggedCells] = useState<Set<number>>(new Set());
+    const [opponentCursor, setOpponentCursor] = useState<number | null>(null);
 
     // PvP Specific State
     const [freezeTimer, setFreezeTimer] = useState(0);
     const [playerProgress, setPlayerProgress] = useState(0);
     const [opponentProgress, setOpponentProgress] = useState(0);
+
+    // --- State Ref for Cursor Deduplication ---
+    const lastSentCursorIndex = useRef<number | null>(null);
+
     // DERIVED STATE
     const isFrozen = freezeTimer > 0;
-
-
 
     useEffect(() => {
         if (!connection) return;
@@ -45,6 +47,7 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
         const handlePlayerFrozen = (seconds: number) => setFreezeTimer(seconds);
         const handlePlayerProgress = (percentage: number) => setPlayerProgress(percentage);
         const handleOpponentProgress = (percentage: number) => setOpponentProgress(percentage);
+        const handleOpponentCursor = (index: number | null) => setOpponentCursor(index);
 
         const handleFlagToggled = (index: number, isFlagged: boolean) => {
             setFlaggedCells(prev => {
@@ -62,6 +65,7 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
         connection.on("PlayerProgress", handlePlayerProgress);
         connection.on("OpponentProgress", handleOpponentProgress);
         connection.on("FlagToggled", handleFlagToggled);
+        connection.on("OpponentCursorMoved", handleOpponentCursor);
 
         // 3. Відписуємось ТОЧНО від цих функцій (безпечне очищення)
         return () => {
@@ -71,10 +75,11 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
             connection.off("PlayerProgress", handlePlayerProgress);
             connection.off("OpponentProgress", handleOpponentProgress);
             connection.off("FlagToggled", handleFlagToggled);
+            connection.off("OpponentCursorMoved", handleOpponentCursor);
         };
     }, [connection]);
 
-    // Таймер [залишається як ми робили раніше]
+    // Таймер
     useEffect(() => {
         if (!isFrozen) return;
         const timer = setInterval(() => {
@@ -84,17 +89,12 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
     }, [isFrozen]);
 
     // ACTIONS
-
     const revealCell = async (x: number, y: number) => {
-        // ✅ Жорстка перевірка з'єднання
         if (!connection || gameStatus !== "Playing" || isFrozen) return;
-
-        // Без `?.` - якщо з'єднання є, воно точно викличе метод
         await connection.invoke("RevealCell", matchId, x, y);
     };
 
     const toggleFlag = async (index: number) => {
-        // ✅ Жорстка перевірка з'єднання
         if (!connection || gameStatus !== "Playing" || isFrozen) return;
 
         const isCurrentlyFlagged = flaggedCells.has(index);
@@ -108,7 +108,6 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
         });
 
         try {
-            // Без `?.` - тепер помилки мережі гарантовано потраплять у catch
             await connection.invoke("ToggleFlag", matchId, index, newFlagState);
         } catch (error) {
             setFlaggedCells(prev => {
@@ -121,16 +120,32 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
         }
     };
 
+    const sendCursorMove = async (index: number | null) => {
+        if (!connection || gameStatus !== "Playing" || isFrozen) return;
+
+        // --- Deduplication Logic ---
+        if (index === lastSentCursorIndex.current) return; // Prevent duplicate requests
+        lastSentCursorIndex.current = index;
+
+        try {
+            await connection.invoke("SendCursorPosition", matchId, index);
+        } catch (error) {
+            console.error("SendCursorPosition failed:", error); // Changed from console.log to console.error
+        }
+    };
+
     return {
         revealedCells,
-        flaggedCells, // Exported
+        flaggedCells,
         gameStatus,
         finalMines,
         isFrozen,
         freezeTimer,
         playerProgress,
         opponentProgress,
+        opponentCursor,
         revealCell,
-        toggleFlag    // Exported
+        toggleFlag,
+        sendCursorMove
     };
 };
