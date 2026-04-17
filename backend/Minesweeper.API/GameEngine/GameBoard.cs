@@ -73,36 +73,127 @@ namespace Minesweeper.API.GameEngine
 
         private void GenerateSafeBoard(int safeIndex)
         {
-            // Use the provided seed for PvP (to make identical boards), or random for Solo/Co-op
             var rand = _seed.HasValue ? new Random(_seed.Value) : new Random();
             int totalCells = Width * Height;
-
-            // The clicked cell and its neighbors must be safe
             var safeZone = new HashSet<int>(GetNeighbors(safeIndex)) { safeIndex };
-            int maxMines = totalCells - safeZone.Count;
-            if (MinesCount > maxMines)
+
+            int maxAttempts = 20; // Обмеження, щоб сервер не завис, якщо поле надто щільне
+            int attempts = 0;
+            bool isLogicallySolvable = false;
+
+            while (!isLogicallySolvable && attempts < maxAttempts)
             {
-                throw new InvalidOperationException($"Cannot place {MinesCount} mines. Maximum for this board size is {maxMines}.");
-            }
-            while (MinePositions.Count < MinesCount)
-            {
-                int pos = rand.Next(totalCells);
-                if (!safeZone.Contains(pos))
+                attempts++;
+                MinePositions.Clear();
+                _adjacentMinesCache.Clear();
+
+                // 1. Рандомна розстановка мін
+                while (MinePositions.Count < MinesCount)
                 {
-                    MinePositions.Add(pos);
+                    int pos = rand.Next(totalCells);
+                    if (!safeZone.Contains(pos))
+                    {
+                        MinePositions.Add(pos);
+                    }
                 }
+
+                // 2. Кешування сусідів (твій старий код)
+                for (int i = 0; i < totalCells; i++)
+                {
+                    if (!MinePositions.Contains(i))
+                        _adjacentMinesCache[i] = GetNeighbors(i).Count(n => MinePositions.Contains(n));
+                }
+
+                // 3. Перевірка на логічність
+                isLogicallySolvable = SimulateLogicalGame(safeIndex);
             }
 
-            // Pre-calculate adjacent mines for fast retrieval during flood fill
-            for (int i = 0; i < totalCells; i++)
+            if (!isLogicallySolvable)
             {
-                if (!MinePositions.Contains(i))
-                {
-                    _adjacentMinesCache[i] = GetNeighbors(i).Count(n => MinePositions.Contains(n));
-                }
+                Console.WriteLine($"[Warning] Failed to generate 100% logical board after {maxAttempts} attempts. Using best available.");
             }
 
             IsGenerated = true;
+        }
+
+        // --- Внутрішній БОТ-СИМУЛЯТОР ---
+        private bool SimulateLogicalGame(int startIndex)
+        {
+            var simulatedRevealed = new HashSet<int>();
+            var simulatedFlags = new HashSet<int>();
+            bool progressMade;
+
+            // Імітуємо перший клік (відкриваємо safeIndex та запускаємо Flood Fill)
+            SimulateReveal(startIndex, simulatedRevealed);
+
+            // Цикл працює, поки бот знаходить нові логічні кроки
+            do
+            {
+                progressMade = false;
+
+                // Проходимось по всіх відкритих цифрах
+                foreach (var cell in simulatedRevealed.ToList())
+                {
+                    int cellMines = _adjacentMinesCache.GetValueOrDefault(cell, 0);
+                    if (cellMines == 0) continue;
+
+                    var neighbors = GetNeighbors(cell).ToList();
+                    var hiddenNeighbors = neighbors.Where(n => !simulatedRevealed.Contains(n)).ToList();
+                    var flaggedNeighbors = neighbors.Count(n => simulatedFlags.Contains(n));
+
+                    // ПРАВИЛО 1: Якщо кількість прихованих клітинок + вже поставлених прапорців 
+                    // дорівнює цифрі на клітинці -> всі приховані сусіди це 100% МІНИ.
+                    if (hiddenNeighbors.Count + flaggedNeighbors == cellMines)
+                    {
+                        foreach (var hidden in hiddenNeighbors)
+                        {
+                            if (simulatedFlags.Add(hidden))
+                                progressMade = true;
+                        }
+                    }
+
+                    // ПРАВИЛО 2: Якщо навколо цифри вже стоїть достатньо прапорців ->
+                    // всі інші приховані сусіди 100% БЕЗПЕЧНІ.
+                    if (flaggedNeighbors == cellMines)
+                    {
+                        foreach (var hidden in hiddenNeighbors)
+                        {
+                            if (!simulatedFlags.Contains(hidden))
+                            {
+                                SimulateReveal(hidden, simulatedRevealed);
+                                progressMade = true;
+                            }
+                        }
+                    }
+                }
+
+            } while (progressMade);
+
+            // Гра виграна логічно, якщо ми відкрили всі клітинки без мін
+            int targetReveals = (Width * Height) - MinesCount;
+            return simulatedRevealed.Count == targetReveals;
+        }
+
+        // Допоміжний метод для симулятора (спрощений Flood Fill)
+        private void SimulateReveal(int startIndex, HashSet<int> simulatedRevealed)
+        {
+            var queue = new Queue<int>();
+            queue.Enqueue(startIndex);
+
+            while (queue.Count > 0)
+            {
+                int current = queue.Dequeue();
+                if (!simulatedRevealed.Add(current)) continue;
+
+                if (_adjacentMinesCache.GetValueOrDefault(current, 0) == 0)
+                {
+                    foreach (var neighbor in GetNeighbors(current))
+                    {
+                        if (!simulatedRevealed.Contains(neighbor) && !MinePositions.Contains(neighbor))
+                            queue.Enqueue(neighbor);
+                    }
+                }
+            }
         }
 
         private void ExecuteFloodFill(int startIndex, List<CellInfo> newlyRevealed)

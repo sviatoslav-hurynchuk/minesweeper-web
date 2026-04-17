@@ -33,7 +33,7 @@ export const useLobby = (username: string | null, userId: string | null) => {
         if (!username || !userId) return;
 
         const newConnection = new signalR.HubConnectionBuilder()
-            .withUrl("http://192.168.171.101:5244/gamehub")
+            .withUrl("http://192.168.1.186:5244/gamehub")
             .withAutomaticReconnect()
             .build();
 

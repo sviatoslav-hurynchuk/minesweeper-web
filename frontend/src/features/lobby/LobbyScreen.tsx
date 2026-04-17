@@ -76,7 +76,7 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
                     ) : (
                         <ul className="space-y-3">
                             {players.map(player => (
-                                <li key={player.connectionId} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg transition-colors">
+                                <li key={player.connectionId} className="flex justify-between items-center p-3 hover:bg-gray-50 hover:text-black rounded-lg transition-colors">
                                     <span className="font-medium">{player.username} {player.userId === user.id && "(You)"}</span>
                                     {player.userId !== user.id && (
                                         <button
