@@ -81,7 +81,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({connection, matchId, width,
                     key={index}
                     onMouseEnter={() => sendCursorMove(index)}
                     onMouseLeave={() => sendCursorMove(null)}
-                    // ЗМЕНШЕНО ДО 30px ТА text-base
                     className={`
                         w-[30px] h-[30px] flex-shrink-0 flex items-center justify-center font-bold text-base select-none rounded-sm transition-all relative
                         ${cell ? 'text-black bg-gray-200 border-none' : 'bg-gray-400 hover:bg-gray-300 border-b-4 border-gray-500 cursor-pointer active:border-b-0 active:translate-y-1'}
@@ -167,7 +166,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({connection, matchId, width,
                             <div
                                 className="grid gap-1 bg-gray-800 w-max mx-auto shadow-inner"
                                 style={{
-                                    // ЗМЕНШЕНО ДО 30px
                                     gridTemplateColumns: `repeat(${width}, 30px)`,
                                     gridTemplateRows: `repeat(${height}, 30px)`
                                 }}
@@ -197,7 +195,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({connection, matchId, width,
                 )}
             </div>
 
-            {/* ЗМЕНШЕНО РОЗМІРИ КНОПОК ТА ПАНЕЛІ (xl:w-32, xl:py-4, text-base) */}
             <div className="order-3 xl:order-3 mt-2 xl:mt-2 flex flex-row xl:flex-col bg-gray-900 rounded-xl p-2 border-2 border-gray-700 shadow-xl shrink-0 gap-2 xl:w-32">
                 <button onClick={() => setClickMode("reveal")} className={`flex flex-1 xl:flex-none items-center justify-center gap-2 px-4 py-2 xl:py-4 rounded-lg font-bold text-sm xl:text-base transition-all ${clickMode === "reveal" ? "bg-blue-600 text-white shadow-md xl:scale-[1.02]" : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200"}`}>
                     <span className="text-lg">⛏️</span>
