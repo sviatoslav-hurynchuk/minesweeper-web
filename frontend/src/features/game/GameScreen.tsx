@@ -47,7 +47,7 @@ export function GameScreen({ connection, matchId, user, mode, width, height, onL
             </div>
 
             {/* ✅ ФІКС 2: flex-grow займає залишок екрану, а overflow-hidden гарантує, що дошка не вилізе за його межі */}
-            <div className="w-full flex-grow flex flex-col items-center pb-4 overflow-hidden">
+            <div className="w-full flex flex-col items-center pb-4 overflow-hidden">
                 <GameBoard
                     key={matchId}
                     connection={connection}

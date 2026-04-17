@@ -80,7 +80,6 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
                                     <span className="font-medium">{player.username} {player.userId === user.id && "(You)"}</span>
                                     {player.userId !== user.id && (
                                         <button
-                                            // Pass selectedMode here
                                             onClick={() => sendChallenge(player.connectionId, selectedMode)}
                                             className="px-4 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors cursor-pointer"
                                         >
