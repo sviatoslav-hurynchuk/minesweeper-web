@@ -59,7 +59,6 @@ export const useLobby = (username: string | null, userId: string | null) => {
 
         // ✅ НОВЕ: Слухаємо помилки від сервера (наприклад, якщо опонент вже грає)
         newConnection.on("ErrorMessage", (message: string) => {
-            alert(message); // Виводимо алерт (можеш замінити на красивий тост у UI)
             setErrorMessage(message);
             setIncomingChallenge(null); // Скидаємо виклик, бо він більше неактуальний
         });
@@ -108,7 +107,7 @@ export const useLobby = (username: string | null, userId: string | null) => {
         connection,
         players,
         incomingChallenge,
-        errorMessage, // Експортуємо повідомлення про помилку
+        errorMessage,
         sendChallenge,
         clearChallenge,
         acceptChallenge,

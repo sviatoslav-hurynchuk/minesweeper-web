@@ -1,6 +1,6 @@
-import React, {useState} from 'react';
-import {HubConnection} from '@microsoft/signalr';
-import {useGameEngine} from '../../../hooks/useGameEngine';
+import React, { useState, useCallback, useRef } from 'react';
+import { HubConnection } from '@microsoft/signalr';
+import { useGameEngine } from '../../../hooks/useGameEngine';
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 
 interface GameBoardProps {
@@ -28,7 +28,7 @@ const getNeighbors = (index: number, width: number, height: number) => {
     return res;
 };
 
-export const GameBoard: React.FC<GameBoardProps> = ({connection, matchId, width, height, onLeave, mode}) => {
+export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width, height, onLeave, mode }) => {
     const {
         revealedCells, flaggedCells, gameStatus, finalMines,
         isFrozen, freezeTimer, revealCell, toggleFlag,
@@ -36,6 +36,23 @@ export const GameBoard: React.FC<GameBoardProps> = ({connection, matchId, width,
     } = useGameEngine(connection, matchId);
 
     const [clickMode, setClickMode] = useState<"reveal" | "flag">("reveal");
+
+    // --- Тротлінг та дедуплікація курсору ---
+    const lastSentIndex = useRef<number | null>(null);
+    const lastThrottleTime = useRef<number>(0);
+
+    const throttledCursorMove = useCallback((index: number | null) => {
+        const now = Date.now();
+        // Якщо індекс той самий — нічого не шлемо
+        if (index === lastSentIndex.current) return;
+
+        // Шлемо не частіше ніж раз на 50мс (або миттєво, якщо це null — прибирання курсору)
+        if (index === null || now - lastThrottleTime.current > 50) {
+            lastSentIndex.current = index;
+            lastThrottleTime.current = now;
+            sendCursorMove(index);
+        }
+    }, [sendCursorMove]);
 
     const handleCellClick = (index: number, x: number, y: number) => {
         const cell = revealedCells[index];
@@ -52,7 +69,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({connection, matchId, width,
                     if (!revealedCells[n] && !flaggedCells.has(n)) {
                         const nx = n % width;
                         const ny = Math.floor(n / width);
-                        revealCell(nx, ny).catch();
+                        revealCell(nx, ny).catch(console.error);
                     }
                 });
             }
@@ -79,8 +96,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({connection, matchId, width,
             cells.push(
                 <div
                     key={index}
-                    onMouseEnter={() => sendCursorMove(index)}
-                    onMouseLeave={() => sendCursorMove(null)}
+                    // ✅ Додали data-index для делегації подій
+                    data-index={index}
                     className={`
                         w-[30px] h-[30px] flex-shrink-0 flex items-center justify-center font-bold text-base select-none rounded-sm transition-all relative
                         ${cell ? 'text-black bg-gray-200 border-none' : 'bg-gray-400 hover:bg-gray-300 border-b-4 border-gray-500 cursor-pointer active:border-b-0 active:translate-y-1'}
@@ -151,18 +168,25 @@ export const GameBoard: React.FC<GameBoardProps> = ({connection, matchId, width,
                     initialScale={1}
                     minScale={0.5}
                     maxScale={3}
-                    wheel={{
-                        step: 0.0005
-                    }}
+                    wheel={{ step: 0.0005 }}
                     pinch={{ step: 3 }}
-                    panning={{
-                        velocityDisabled: true,
-                        allowLeftClickPan: false,
-                    }}
+                    panning={{ velocityDisabled: true, allowLeftClickPan: false }}
                     doubleClick={{ disabled: true }}
                 >
                     <TransformComponent wrapperStyle={{ width: "fit-content", height: "fit-content", maxWidth: "100%" }}>
-                        <div className="p-2 md:p-6">
+                        {/* ✅ ОДИН обробник на весь контейнер замість 256 індивідуальних */}
+                        <div
+                            className="p-2 md:p-6"
+                            onMouseMove={(e) => {
+                                const target = e.target as HTMLElement;
+                                const cell = target.closest('[data-index]');
+                                if (cell) {
+                                    const idx = parseInt(cell.getAttribute('data-index') || '', 10);
+                                    throttledCursorMove(idx);
+                                }
+                            }}
+                            onMouseLeave={() => throttledCursorMove(null)}
+                        >
                             <div
                                 className="grid gap-1 bg-gray-800 w-max mx-auto shadow-inner"
                                 style={{

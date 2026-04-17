@@ -17,6 +17,9 @@ namespace Minesweeper.API.Hubs
         private static readonly ConcurrentDictionary<Guid, GameState> ActiveMatches = new();
         private static readonly ConcurrentDictionary<string, PlayerData> OnlinePlayers = new();
 
+        // Словник для атомарного бронювання підключень під час створення матчу
+        private static readonly ConcurrentDictionary<string, byte> Reservations = new();
+
         // --- LOBBY METHODS ---
 
         public async Task JoinLobby(string username, string userId)
@@ -49,30 +52,62 @@ namespace Minesweeper.API.Hubs
 
         public async Task AcceptChallenge(string challengerConnectionId, string mode)
         {
+            string acceptorId = Context.ConnectionId;
+
             if (!OnlinePlayers.TryGetValue(challengerConnectionId, out var challenger))
             {
                 await Clients.Caller.SendAsync("ErrorMessage", "Гравець вийшов з мережі.");
                 return;
             }
 
-            // 2. Перевіряємо, чи ініціатор вже не грає в іншому матчі
-            bool isChallengerBusy = ActiveMatches.Values.Any(m => m.Players.ContainsKey(challengerConnectionId));
+            bool challengerReserved = false;
+            bool acceptorReserved = false;
 
-            if (isChallengerBusy)
+            try
             {
-                // Повідомляємо тому, хто намагався прийняти, що він запізнився
-                await Clients.Caller.SendAsync("ErrorMessage", "Неможливо почати матч: опонент вже грає в іншому матчі.");
-                return;
+                // 1. Атомарне бронювання обох гравців
+                challengerReserved = Reservations.TryAdd(challengerConnectionId, 1);
+                if (challengerReserved)
+                {
+                    acceptorReserved = Reservations.TryAdd(acceptorId, 1);
+                }
+
+                if (!challengerReserved || !acceptorReserved)
+                {
+                    await Clients.Caller.SendAsync("ErrorMessage", "Неможливо почати матч: один з гравців вже обробляє інший запит.");
+                    return;
+                }
+
+                // 2. Перевіряємо, чи жоден з гравців вже не знаходиться в активному матчі
+                bool isEitherBusy = ActiveMatches.Values.Any(m =>
+                    m.Players.ContainsKey(challengerConnectionId) ||
+                    m.Players.ContainsKey(acceptorId));
+
+                if (isEitherBusy)
+                {
+                    await Clients.Caller.SendAsync("ErrorMessage", "Неможливо почати матч: один з гравців вже грає в іншому матчі.");
+                    return;
+                }
+
+                // 3. Запускаємо гру
+                Guid matchId = Guid.NewGuid();
+                await StartMatch(matchId, mode, challengerConnectionId, acceptorId);
             }
-            Guid matchId = Guid.NewGuid();
-            await StartMatch(matchId, mode, challengerConnectionId, Context.ConnectionId);
+            finally
+            {
+                // Знімаємо бронювання
+                if (acceptorReserved) Reservations.TryRemove(acceptorId, out _);
+                if (challengerReserved) Reservations.TryRemove(challengerConnectionId, out _);
+            }
         }
 
         // --- GAMEPLAY METHODS ---
 
-        public async Task SendCursorPosition(string matchId, int? cellIndex)
+        public async Task SendCursorPosition(Guid matchId, int? cellIndex)
         {
-            await Clients.GroupExcept(matchId, Context.ConnectionId)
+            if (!ActiveMatches.TryGetValue(matchId, out var match)) return;
+            if (!match.Players.ContainsKey(Context.ConnectionId)) return;
+            await Clients.GroupExcept(matchId.ToString(), Context.ConnectionId)
                          .SendAsync("OpponentCursorMoved", cellIndex);
         }
 
@@ -113,6 +148,32 @@ namespace Minesweeper.API.Hubs
         public async Task StartSoloMatch(int width, int height, int minesCount)
         {
             var connectionId = Context.ConnectionId;
+
+            // 1. Валідація розмірів поля (щоб не покласти сервер величезними масивами)
+            // 50x50 - розумний ліміт, враховуючи, що найважчий режим у нас 30x16
+            const int MaxDim = 50;
+            if (width <= 0 || height <= 0 || width > MaxDim || height > MaxDim)
+            {
+                await Clients.Caller.SendAsync("ErrorMessage", "Некоректні розміри поля.");
+                return;
+            }
+
+            // 2. Валідація кількості мін. 
+            // Віднімаємо 9, бо алгоритм GenerateSafeBoard резервує зону 3x3 навколо першого кліку.
+            if (minesCount <= 0 || minesCount >= (width * height) - 9)
+            {
+                await Clients.Caller.SendAsync("ErrorMessage", "Некоректна кількість мін.");
+                return;
+            }
+
+            // 3. Перевірка на "дублікати" матчів. Захищає від спаму запитами.
+            if (ActiveMatches.Values.Any(m => m.Players.ContainsKey(connectionId)))
+            {
+                await Clients.Caller.SendAsync("ErrorMessage", "Ви вже граєте в іншому матчі.");
+                return;
+            }
+
+            // Якщо всі перевірки пройдено — створюємо гру
             Guid matchId = Guid.NewGuid();
 
             var match = new GameState
@@ -135,8 +196,8 @@ namespace Minesweeper.API.Hubs
             {
                 MatchId = matchId.ToString(),
                 Mode = "Solo",
-                Rows = height, // У фронтенді ми очікуємо Rows = height
-                Cols = width   // У фронтенді ми очікуємо Cols = width
+                Rows = height,
+                Cols = width
             });
         }
 

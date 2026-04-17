@@ -77,9 +77,13 @@ namespace Minesweeper.API.GameEngine
             int totalCells = Width * Height;
             var safeZone = new HashSet<int>(GetNeighbors(safeIndex)) { safeIndex };
 
-            int maxAttempts = 20; // Обмеження, щоб сервер не завис, якщо поле надто щільне
+            int maxAttempts = 100; 
             int attempts = 0;
             bool isLogicallySolvable = false;
+
+            int bestRevealedCount = -1;
+            HashSet<int> bestMinePositions = new();
+            Dictionary<int, int> bestAdjacentMinesCache = new();
 
             while (!isLogicallySolvable && attempts < maxAttempts)
             {
@@ -87,7 +91,7 @@ namespace Minesweeper.API.GameEngine
                 MinePositions.Clear();
                 _adjacentMinesCache.Clear();
 
-                // 1. Рандомна розстановка мін
+                // 1. Random mine placement
                 while (MinePositions.Count < MinesCount)
                 {
                     int pos = rand.Next(totalCells);
@@ -97,27 +101,47 @@ namespace Minesweeper.API.GameEngine
                     }
                 }
 
-                // 2. Кешування сусідів (твій старий код)
+                // 2. Caching neighbors
                 for (int i = 0; i < totalCells; i++)
                 {
                     if (!MinePositions.Contains(i))
                         _adjacentMinesCache[i] = GetNeighbors(i).Count(n => MinePositions.Contains(n));
                 }
 
-                // 3. Перевірка на логічність
-                isLogicallySolvable = SimulateLogicalGame(safeIndex);
+                // 3. Logic check
+                isLogicallySolvable = SimulateLogicalGame(safeIndex, out int revealedCount);
+
+                if (isLogicallySolvable)
+                {
+                    break; // Perfect board found, current state is already correct
+                }
+
+                // Track the best available board if a perfect one isn't found
+                if (revealedCount > bestRevealedCount)
+                {
+                    bestRevealedCount = revealedCount;
+                    bestMinePositions = new HashSet<int>(MinePositions);
+                    bestAdjacentMinesCache = new Dictionary<int, int>(_adjacentMinesCache);
+                }
             }
 
+            // If we maxed out attempts, restore the board state that had the most logically solvable cells
             if (!isLogicallySolvable)
             {
-                Console.WriteLine($"[Warning] Failed to generate 100% logical board after {maxAttempts} attempts. Using best available.");
+                MinePositions.Clear();
+                foreach (var m in bestMinePositions) MinePositions.Add(m);
+
+                _adjacentMinesCache.Clear();
+                foreach (var kvp in bestAdjacentMinesCache) _adjacentMinesCache[kvp.Key] = kvp.Value;
+
+                Console.WriteLine($"[Warning] Failed to generate 100% logical board after {maxAttempts} attempts. Using best available which revealed {bestRevealedCount} cells.");
             }
 
             IsGenerated = true;
         }
 
         // --- Внутрішній БОТ-СИМУЛЯТОР ---
-        private bool SimulateLogicalGame(int startIndex)
+        private bool SimulateLogicalGame(int startIndex, out int revealedCount)
         {
             var simulatedRevealed = new HashSet<int>();
             var simulatedFlags = new HashSet<int>();
@@ -169,9 +193,9 @@ namespace Minesweeper.API.GameEngine
 
             } while (progressMade);
 
-            // Гра виграна логічно, якщо ми відкрили всі клітинки без мін
+            revealedCount = simulatedRevealed.Count;
             int targetReveals = (Width * Height) - MinesCount;
-            return simulatedRevealed.Count == targetReveals;
+            return revealedCount == targetReveals;
         }
 
         // Допоміжний метод для симулятора (спрощений Flood Fill)

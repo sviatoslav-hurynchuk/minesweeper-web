@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { HubConnection } from '@microsoft/signalr';
 import type { CellInfo, MatchFinishedPayload } from "../game.types.ts";
 
@@ -16,6 +16,9 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
     const [freezeTimer, setFreezeTimer] = useState(0);
     const [playerProgress, setPlayerProgress] = useState(0);
     const [opponentProgress, setOpponentProgress] = useState(0);
+
+    // --- State Ref for Cursor Deduplication ---
+    const lastSentCursorIndex = useRef<number | null>(null);
 
     // DERIVED STATE
     const isFrozen = freezeTimer > 0;
@@ -62,7 +65,7 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
         connection.on("PlayerProgress", handlePlayerProgress);
         connection.on("OpponentProgress", handleOpponentProgress);
         connection.on("FlagToggled", handleFlagToggled);
-        connection.on("OpponentCursorMoved", handleOpponentCursor); // ✅ Додано підписку на курсор
+        connection.on("OpponentCursorMoved", handleOpponentCursor);
 
         // 3. Відписуємось ТОЧНО від цих функцій (безпечне очищення)
         return () => {
@@ -72,7 +75,7 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
             connection.off("PlayerProgress", handlePlayerProgress);
             connection.off("OpponentProgress", handleOpponentProgress);
             connection.off("FlagToggled", handleFlagToggled);
-            connection.off("OpponentCursorMoved", handleOpponentCursor); // ✅ Додано відписку
+            connection.off("OpponentCursorMoved", handleOpponentCursor);
         };
     }, [connection]);
 
@@ -119,10 +122,15 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
 
     const sendCursorMove = async (index: number | null) => {
         if (!connection || gameStatus !== "Playing" || isFrozen) return;
+
+        // --- Deduplication Logic ---
+        if (index === lastSentCursorIndex.current) return; // Prevent duplicate requests
+        lastSentCursorIndex.current = index;
+
         try {
             await connection.invoke("SendCursorPosition", matchId, index);
         } catch (error) {
-            console.log(error);// Ігноруємо дрібні помилки мережі при русі миші
+            console.error("SendCursorPosition failed:", error); // Changed from console.log to console.error
         }
     };
 
