@@ -21,6 +21,7 @@ A modern, web-based version of the classic Minesweeper game, featuring real-time
 * **KISS (Keep It Simple, Stupid):** Simplified optimistic UI updates that instantly react to user input before server confirmation.
 * **Fail Fast:** Throwing `InvalidOperationException` on the backend immediately when an invalid board configuration (e.g., too many mines) is requested.
 * **Separation of Concerns (SoC):** Decoupling UI components (`GameBoard`) from state management and SignalR communication (`useGameEngine`).
+* **Defensive Programming:** Validating all client-side inputs (e.g., board dimensions, mine limits) on the server to prevent memory leaks (OOM) and infinite loops during board generation.
 
 ## Design Patterns
 * **Strategy Pattern:** Used on the backend (`IGameModeStrategy`) to seamlessly switch between Solo, Co-Op, and PvP logic without polluting the SignalR Hub.
@@ -33,3 +34,6 @@ A modern, web-based version of the classic Minesweeper game, featuring real-time
 * **Optimistic UI with Rollback:** Updating local React state immediately (e.g., flag toggling), coupled with a `try/catch` mechanism to revert state if the server invocation fails.
 * **Safe Concurrent Access:** Introducing `lock` blocks and snapshotting (`ToList()`) on the backend to prevent race conditions in multi-threaded multiplayer scenarios.
 * **Data Normalization:** Converting `PascalCase` backend properties to `camelCase` at the serialization level to ensure seamless integration with TypeScript interfaces.
+* **Event Delegation:** Moving mouse listeners from hundreds of individual cell components to a single parent grid container to drastically reduce DOM overhead.
+* **Network Throttling:** Implementing debouncing and deduplication (`useRef` + timestamps) for high-frequency SignalR broadcasts (like cursor tracking) to prevent channel flooding.
+* **Atomic Operations:** Utilizing `ConcurrentDictionary.TryAdd` as a lightweight atomic reservation lock to prevent TOCTOU (Time-Of-Check to Time-Of-Use) race conditions during concurrent matchmaking.
