@@ -127,6 +127,7 @@ namespace Minesweeper.API.Hubs
         public async Task ToggleFlag(Guid matchId, int index, bool isFlagged)
         {
             if (!ActiveMatches.TryGetValue(matchId, out var match)) return;
+            if (!match.Players.ContainsKey(Context.ConnectionId)) return;
 
             if (match.GameMode == "CoOp")
             {

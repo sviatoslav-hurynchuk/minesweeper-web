@@ -8,4 +8,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    host: true, // Це дозволить заходити на фронтенд з телефону (через IP)
+  }
 })

@@ -1,7 +1,8 @@
-// src/hooks/useLobby.ts
 import { useEffect, useState } from 'react';
 import * as signalR from '@microsoft/signalr';
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+console.log("RECEIVED IP FROM .ENV:", import.meta.env.VITE_API_URL);
 export interface PlayerData {
     connectionId: string;
     username: string;
@@ -33,7 +34,7 @@ export const useLobby = (username: string | null, userId: string | null) => {
         if (!username || !userId) return;
 
         const newConnection = new signalR.HubConnectionBuilder()
-            .withUrl("http://192.168.1.186:5244/gamehub")
+            .withUrl(`${API_URL}/gamehub`)
             .withAutomaticReconnect()
             .build();
 
@@ -100,8 +101,13 @@ export const useLobby = (username: string | null, userId: string | null) => {
     };
 
     const clearChallenge = () => setIncomingChallenge(null);
-    const clearActiveGame = () => setActiveGame(null);
-    const clearErrorMessage = () => setErrorMessage(null); // Додано для зручності
+    const clearActiveGame = () => {
+        if (connection && activeGame) {
+            connection.invoke("LeaveMatch", activeGame.matchId).catch(console.error);
+        }
+
+        setActiveGame(null);
+    };    const clearErrorMessage = () => setErrorMessage(null); // Додано для зручності
 
     return {
         connection,

@@ -42,6 +42,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
     const lastThrottleTime = useRef<number>(0);
 
     const throttledCursorMove = useCallback((index: number | null) => {
+        // Запобіжник: якщо ми в соло режимі, просто ігноруємо рух курсора
+        if (mode === "Solo") return;
+
+        // Запобіжник NaN (якщо data-index був відсутній або некоректний)
+        if (index !== null && Number.isNaN(index)) return;
+
         const now = Date.now();
         // Якщо індекс той самий — нічого не шлемо
         if (index === lastSentIndex.current) return;
@@ -50,9 +56,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
         if (index === null || now - lastThrottleTime.current > 50) {
             lastSentIndex.current = index;
             lastThrottleTime.current = now;
-            sendCursorMove(index);
+            sendCursorMove(index)
+            .catch();
         }
-    }, [sendCursorMove]);
+    }, [sendCursorMove, mode]); // Додали mode в залежності
 
     const handleCellClick = (index: number, x: number, y: number) => {
         const cell = revealedCells[index];
@@ -92,7 +99,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
             const cell = revealedCells[index];
             const isMine = finalMinesSet.has(index);
             const isFlagged = flaggedCells.has(index);
-            const isOpponentLooking = opponentCursor === index && mode !== "Solo" && mode !== "PvP";
+            const isOpponentLooking = opponentCursor === index && mode === "CoOp";
             cells.push(
                 <div
                     key={index}
@@ -177,7 +184,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
                         {/* ✅ ОДИН обробник на весь контейнер замість 256 індивідуальних */}
                         <div
                             className="p-2 md:p-6"
-                            onMouseMove={(e) => {
+                            // Вимикаємо обробники подій для Solo режиму на рівні DOM, щоб не ганяти порожні цикли
+                            onMouseMove={mode === "Solo" ? undefined : (e) => {
                                 const target = e.target as HTMLElement;
                                 const cell = target.closest('[data-index]');
                                 if (cell) {
@@ -185,7 +193,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
                                     throttledCursorMove(idx);
                                 }
                             }}
-                            onMouseLeave={() => throttledCursorMove(null)}
+                            onMouseLeave={mode === "Solo" ? undefined : () => throttledCursorMove(null)}
                         >
                             <div
                                 className="grid gap-1 bg-gray-800 w-max mx-auto shadow-inner"
