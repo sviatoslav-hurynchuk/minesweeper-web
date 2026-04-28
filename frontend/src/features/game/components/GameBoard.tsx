@@ -53,7 +53,7 @@ export const GameBoard = ({ connection, matchId, width, height, totalMines, onLe
         if (index === null || now - lastThrottleTime.current > 50) {
             lastSentIndex.current = index;
             lastThrottleTime.current = now;
-            sendCursorMove(index).catch();
+            void sendCursorMove(index).catch(console.error);
         }
     }, [sendCursorMove, mode]);
 
@@ -136,6 +136,7 @@ export const GameBoard = ({ connection, matchId, width, height, totalMines, onLe
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.repeat) return;
             if (e.key === "Escape" && mode === "Solo" && gameStatus === "Playing") {
                 togglePause();
             }
@@ -198,6 +199,7 @@ export const GameBoard = ({ connection, matchId, width, height, totalMines, onLe
                             <button
                                 onClick={togglePause}
                                 disabled={gameStatus !== "Playing"}
+                                aria-label={isPaused ? "Resume game" : "Pause game"}
                                 className={`px-4 md:px-6 py-1.5 md:py-2 font-black uppercase tracking-wide rounded-lg shadow-md transition-all text-xs md:text-base ${isPaused ? 'bg-green-600 hover:bg-green-500 text-white animate-pulse' : 'bg-gray-700 hover:bg-gray-600 text-gray-200'}`}
                             >
                                 {isPaused ? "▶" : "⏸"} <span className="hidden sm:inline">{isPaused ? " Resume" : " Pause"}</span>
@@ -269,7 +271,7 @@ export const GameBoard = ({ connection, matchId, width, height, totalMines, onLe
                                             gameStatus === "Abandoned" ? "🚪 TEAMMATE LEFT" :
                                                 "💀 BOOM!"}
                                 </h2>
-                                {gameStatus === "Abandoned" && <p className="text-gray-300 text-sm md:text-base font-medium mb-6">The match was cancelled because a player disconnected.</p>}
+                                {gameStatus === "Abandoned" && <p className="text-gray-300 text-sm md:text-base font-medium mb-6">A player disconnected.</p>}
                                 <button onClick={onLeave} className="bg-blue-600 hover:bg-blue-500 text-white font-black py-3 px-8 md:py-4 md:px-10 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-transform hover:scale-105 uppercase w-full md:w-auto">Back to Lobby</button>
                             </div>
                         </div>

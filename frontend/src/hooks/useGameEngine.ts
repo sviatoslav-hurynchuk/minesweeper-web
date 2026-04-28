@@ -119,12 +119,12 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
 
     
     const revealCell = async (x: number, y: number) => {
-        if (!connection || gameStatus !== "Playing" || isFrozen) return;
+        if (!connection || gameStatus !== "Playing" || isFrozen || isPaused) return;
         await connection.invoke("RevealCell", matchId, x, y);
     };
 
     const toggleFlag = async (index: number) => {
-        if (!connection || gameStatus !== "Playing" || isFrozen) return;
+        if (!connection || gameStatus !== "Playing" || isFrozen || isPaused) return;
 
         const isCurrentlyFlagged = flaggedCells.has(index);
         const newFlagState = !isCurrentlyFlagged;
@@ -150,7 +150,7 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
     };
 
     const sendCursorMove = async (index: number | null) => {
-        if (!connection || gameStatus !== "Playing" || isFrozen) return;
+        if (!connection || gameStatus !== "Playing" || isFrozen || isPaused) return;
 
         
         if (index === lastSentCursorIndex.current) return; 
