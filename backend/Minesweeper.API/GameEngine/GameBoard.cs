@@ -295,7 +295,22 @@ namespace Minesweeper.API.GameEngine
 
             return (int)((RevealedCells.Count / (double)targetReveals) * 100);
         }
+        public void SyncMines(IEnumerable<int> mines)
+        {
+            MinePositions = new HashSet<int>(mines);
+            IsGenerated = true;
 
+            int totalCells = Width * Height;
+            _adjacentMinesCache.Clear();
+
+            for (int i = 0; i < totalCells; i++)
+            {
+                if (!MinePositions.Contains(i))
+                {
+                    _adjacentMinesCache[i] = GetNeighbors(i).Count(n => MinePositions.Contains(n));
+                }
+            }
+        }
         public void ResetBoard()
         {
             // Clears player progress but keeps the mines in the exact same spots.
