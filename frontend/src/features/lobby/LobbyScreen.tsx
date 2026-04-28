@@ -1,18 +1,20 @@
-import { useLobby } from '../../hooks/useLobby';
-import { GameScreen } from '../game/GameScreen';
 import { useState, useEffect } from 'react';
+import { useLobby } from '../../hooks/useLobby';
 import type { User } from '../../types';
 
 interface LobbyScreenProps {
     user: User;
+    lobbyState: ReturnType<typeof useLobby>;
 }
 
-export const LobbyScreen = ({ user }: LobbyScreenProps) => {
-    const { players, incomingChallenge, sendChallenge, clearChallenge, acceptChallenge, activeGame, connection, clearActiveGame, startSoloGame, errorMessage, clearErrorMessage } = useLobby(user.username, user.id);
+export const LobbyScreen = ({ user, lobbyState }: LobbyScreenProps) => {
+    const {
+        players, incomingChallenge, errorMessage,
+        sendChallenge, clearChallenge, acceptChallenge, startSoloGame, clearErrorMessage
+    } = lobbyState;
 
     const [selectedMode, setSelectedMode] = useState<"PvP" | "CoOp">("PvP");
 
-    
     useEffect(() => {
         if (errorMessage) {
             const timer = setTimeout(() => {
@@ -22,26 +24,10 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
         }
     }, [errorMessage, clearErrorMessage]);
 
-    if (activeGame) {
-        return (
-            <GameScreen
-                connection={connection}
-                matchId={activeGame.matchId}
-                user={user}
-                mode={activeGame.mode as "Solo" | "CoOp" | "PvP"} 
-                width={activeGame.cols || 16}
-                height={activeGame.rows || 16}
-                totalMines={activeGame.totalMines}
-                onLeave={clearActiveGame}
-            />
-        );
-    }
-
     return (
         <div className="flex flex-col items-center min-h-screen bg-gray-900 text-white w-full">
             <div className="max-w-2xl mx-auto mt-8 relative w-full px-4">
 
-                
                 {errorMessage && (
                     <div className="absolute top-10 left-1/2 transform -translate-x-1/2 -mt-16 w-full max-w-md z-50 animate-fade-in-down">
                         <div className="bg-red-600 border-l-4 border-red-800 text-white p-4 rounded-lg shadow-xl flex justify-between items-start">
@@ -58,12 +44,12 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
                         </div>
                     </div>
                 )}
-                
 
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold">Lobby</h1>
                     <span className="bg-black border border-gray-200 px-3 py-1 rounded-full font-medium">You: {user.username}</span>
                 </div>
+
                 <div className="bg-black p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col items-start gap-4">
                     <h2 className="text-2xl font-bold">Play Solo</h2>
                     <div className="flex flex-wrap gap-4 w-full">
@@ -87,7 +73,7 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
                         </button>
                     </div>
                 </div>
-                
+
                 <div className="bg-black p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex gap-4 items-center">
                     <span className="font-bold">Select Mode:</span>
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -124,7 +110,6 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
                 </div>
             </div>
 
-            
             {incomingChallenge && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-40">
                     <div className="bg-white p-6 rounded-xl shadow-lg text-center text-gray-900">
