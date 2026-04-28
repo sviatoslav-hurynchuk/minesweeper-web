@@ -8,7 +8,6 @@ namespace Minesweeper.API.Strategies
     {
         public void InitializeGame(GameState session, int width, int height, int minesCount)
         {
-            // Same seed ensures both boards have identical mine placements
             int commonSeed = new Random().Next();
 
             foreach (var player in session.Players.Values)
@@ -21,20 +20,33 @@ namespace Minesweeper.API.Strategies
         {
             var player = session.Players[connectionId];
 
-            // 1. Check for active penalty freeze
             if (player.PenaltyUntil.HasValue && player.PenaltyUntil > DateTime.UtcNow)
             {
-                return; // Ignore click
+                return;
             }
 
-            // 2. Process reveal
+            bool isFirstGeneration = !player.Board.IsGenerated;
+
             var result = player.Board.RevealCell(x, y);
+
+            if (isFirstGeneration)
+            {
+                var opponentId = session.Players.Keys.First(id => id != connectionId);
+                var opponent = session.Players[opponentId];
+
+                if (!opponent.Board.IsGenerated)
+                {
+                    opponent.Board.SyncMines(player.Board.GetAllMines());
+                }
+            }
 
             if (result.IsMine)
             {
                 player.PenaltyUntil = DateTime.UtcNow.AddSeconds(10);
 
-                await clientProxy.SendAsync("BoardUpdated", result.RevealedCells);
+                player.Board.ResetBoard();
+
+                await clientProxy.SendAsync("BoardUpdated", new List<CellInfo>());
 
                 await clientProxy.SendAsync("PlayerFrozen", 10);
                 await opponentProxy.SendAsync("OpponentMistake");
