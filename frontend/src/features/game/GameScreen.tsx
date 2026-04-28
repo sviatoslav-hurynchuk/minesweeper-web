@@ -1,3 +1,4 @@
+
 import { HubConnection } from '@microsoft/signalr';
 import { GameBoard } from './components/GameBoard';
 import type { User } from '../../types';
@@ -9,10 +10,11 @@ interface GameScreenProps {
     mode: "Solo" | "CoOp" | "PvP";
     width: number;
     height: number;
+    totalMines: number;
     onLeave: () => void;
 }
 
-export function GameScreen({ connection, matchId, user, mode, width, height, onLeave }: GameScreenProps) {
+export function GameScreen({ connection, matchId, user, mode, width, height, totalMines, onLeave }: GameScreenProps) {
     const handleLeaveMatch = async () => {
         if (!window.confirm("Are you sure you want to leave the match?")) return;
         if (!connection) {
@@ -27,33 +29,38 @@ export function GameScreen({ connection, matchId, user, mode, width, height, onL
     };
 
     return (
-        // ✅ ФІКС 1: h-screen жорстко фіксує висоту вікна, overflow-hidden забороняє глобальний скрол
+        
         <div className="flex flex-col items-center h-screen bg-gray-900 text-white w-full overflow-hidden">
 
-            {/* Шапка гри */}
-            <div className="w-full max-w-6xl flex justify-between items-center px-4 md:px-8 py-4 shrink-0">
+            
+            
+            <div className="w-full max-w-6xl flex justify-between items-center px-4 md:px-8 py-2 md:py-4 shrink-0">
                 <div>
-                    <h1 className="text-2xl md:text-3xl font-bold">
+                    
+                    <h1 className="text-xl md:text-3xl font-bold">
                         💣 Minesweeper: <span className="text-blue-400">{mode}</span>
                     </h1>
-                    <p className="text-sm md:text-lg text-gray-400 mt-1">Player: {user.username}</p>
+                    
+                    <p className="text-xs md:text-lg text-gray-400 md:mt-1">Player: {user.username}</p>
                 </div>
+                
                 <button
                     onClick={handleLeaveMatch}
-                    className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-bold transition-all shadow-lg hover:scale-105"
+                    className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 md:px-6 md:py-3 rounded-lg font-bold text-sm md:text-base transition-all shadow-lg hover:scale-105"
                 >
                     Leave Match
                 </button>
             </div>
 
-            {/* ✅ ФІКС 2: flex-grow займає залишок екрану, а overflow-hidden гарантує, що дошка не вилізе за його межі */}
-            <div className="w-full flex flex-col items-center pb-4 overflow-hidden">
+            
+            <div className="w-full flex flex-col items-center pb-4 overflow-hidden flex-grow">
                 <GameBoard
                     key={matchId}
                     connection={connection}
                     matchId={matchId}
                     width={width}
                     height={height}
+                    totalMines={totalMines}
                     onLeave={onLeave}
                     mode={mode}
                 />

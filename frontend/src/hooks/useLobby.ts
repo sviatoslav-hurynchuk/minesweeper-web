@@ -20,6 +20,7 @@ export interface GameInfo {
     matchId: string;
     rows: number;
     cols: number;
+    totalMines: number;
 }
 
 export const useLobby = (username: string | null, userId: string | null) => {
@@ -43,7 +44,7 @@ export const useLobby = (username: string | null, userId: string | null) => {
                 .catch(e => console.error("Rejoin error: ", e));
         });
 
-        // --- ДОДАЄМО ПОДІЇ ДО СТАРТУ ---
+
         newConnection.on("LobbyUpdated", (onlinePlayers: PlayerData[]) => {
             setPlayers(onlinePlayers);
         });
@@ -55,16 +56,16 @@ export const useLobby = (username: string | null, userId: string | null) => {
         newConnection.on("GameStarted", (info: GameInfo) => {
             setActiveGame(info);
             setIncomingChallenge(null);
-            setErrorMessage(null); // Очищаємо помилки при успішному старті
+            setErrorMessage(null);
         });
 
-        // ✅ НОВЕ: Слухаємо помилки від сервера (наприклад, якщо опонент вже грає)
+
         newConnection.on("ErrorMessage", (message: string) => {
             setErrorMessage(message);
-            setIncomingChallenge(null); // Скидаємо виклик, бо він більше неактуальний
+            setIncomingChallenge(null);
         });
 
-        // --- СТАРТУЄМО З'ЄДНАННЯ ---
+
         newConnection.start()
             .then(() => {
                 newConnection.invoke("JoinLobby", username, userId)
@@ -75,7 +76,7 @@ export const useLobby = (username: string | null, userId: string | null) => {
             .catch(e => console.error("Connection failed: ", e));
 
         return () => {
-            // ✅ Не забуваємо відписуватись від подій
+
             newConnection.off("LobbyUpdated");
             newConnection.off("ChallengeReceived");
             newConnection.off("GameStarted");
@@ -84,7 +85,7 @@ export const useLobby = (username: string | null, userId: string | null) => {
         };
     }, [username, userId]);
 
-    // --- ACTIONS ---
+
     const sendChallenge = (targetConnectionId: string, mode: string) => {
         connection?.invoke("ChallengePlayer", targetConnectionId, mode).catch(console.error);
     };
@@ -107,7 +108,7 @@ export const useLobby = (username: string | null, userId: string | null) => {
         }
 
         setActiveGame(null);
-    };    const clearErrorMessage = () => setErrorMessage(null); // Додано для зручності
+    };    const clearErrorMessage = () => setErrorMessage(null);
 
     return {
         connection,

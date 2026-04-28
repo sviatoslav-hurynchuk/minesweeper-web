@@ -3,30 +3,48 @@ import { HubConnection } from '@microsoft/signalr';
 import type { CellInfo, MatchFinishedPayload } from "../game.types.ts";
 
 export const useGameEngine = (connection: HubConnection | null, matchId: string) => {
-    // Core Game State
+    
     const [revealedCells, setRevealedCells] = useState<Record<number, CellInfo>>({});
-    const [gameStatus, setGameStatus] = useState<"Playing" | "Victory" | "Defeat">("Playing");
+    const [gameStatus, setGameStatus] = useState<"Playing" | "Victory" | "Defeat" | "Abandoned">("Playing");
     const [finalMines, setFinalMines] = useState<number[]>([]);
 
-    // Flagging State & Cursor
+    const [timeElapsed, setTimeElapsed] = useState(0);
+    const [isPaused, setIsPaused] = useState(false);
+    
     const [flaggedCells, setFlaggedCells] = useState<Set<number>>(new Set());
     const [opponentCursor, setOpponentCursor] = useState<number | null>(null);
 
-    // PvP Specific State
+    
     const [freezeTimer, setFreezeTimer] = useState(0);
     const [playerProgress, setPlayerProgress] = useState(0);
     const [opponentProgress, setOpponentProgress] = useState(0);
 
-    // --- State Ref for Cursor Deduplication ---
+    
     const lastSentCursorIndex = useRef<number | null>(null);
 
-    // DERIVED STATE
+    
     const isFrozen = freezeTimer > 0;
 
     useEffect(() => {
+        if (gameStatus === "Playing" && !isFrozen && !isPaused) {
+            const timer = setInterval(() => {
+                setTimeElapsed(prev => prev + 1);
+            }, 1000);
+            return () => clearInterval(timer);
+        }
+    }, [gameStatus, isFrozen, isPaused]);
+
+    const togglePause = () => {
+        if (gameStatus === "Playing") {
+            setIsPaused(prev => !prev);
+
+            
+        }
+    };
+    useEffect(() => {
         if (!connection) return;
 
-        // 1. Оголошуємо всі функції-обробники окремо
+        
         const handleBoardUpdated = (newCells: CellInfo[]) => {
             setRevealedCells(prev => {
                 const updated = { ...prev };
@@ -34,6 +52,17 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
                     updated[cell.index] = cell;
                 });
                 return updated;
+            });
+            setFlaggedCells(prev => {
+                const updated = new Set(prev);
+                let changed = false;
+                newCells.forEach(cell => {
+                    if (updated.has(cell.index)) {
+                        updated.delete(cell.index);
+                        changed = true;
+                    }
+                });
+                return changed ? updated : prev;
             });
         };
 
@@ -58,7 +87,7 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
             });
         };
 
-        // 2. Підписуємось, передаючи саме ці посилання
+        
         connection.on("BoardUpdated", handleBoardUpdated);
         connection.on("MatchFinished", handleMatchFinished);
         connection.on("PlayerFrozen", handlePlayerFrozen);
@@ -67,7 +96,7 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
         connection.on("FlagToggled", handleFlagToggled);
         connection.on("OpponentCursorMoved", handleOpponentCursor);
 
-        // 3. Відписуємось ТОЧНО від цих функцій (безпечне очищення)
+        
         return () => {
             connection.off("BoardUpdated", handleBoardUpdated);
             connection.off("MatchFinished", handleMatchFinished);
@@ -79,7 +108,7 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
         };
     }, [connection]);
 
-    // Таймер
+    
     useEffect(() => {
         if (!isFrozen) return;
         const timer = setInterval(() => {
@@ -88,7 +117,7 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
         return () => clearInterval(timer);
     }, [isFrozen]);
 
-    // ACTIONS
+    
     const revealCell = async (x: number, y: number) => {
         if (!connection || gameStatus !== "Playing" || isFrozen) return;
         await connection.invoke("RevealCell", matchId, x, y);
@@ -123,14 +152,14 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
     const sendCursorMove = async (index: number | null) => {
         if (!connection || gameStatus !== "Playing" || isFrozen) return;
 
-        // --- Deduplication Logic ---
-        if (index === lastSentCursorIndex.current) return; // Prevent duplicate requests
+        
+        if (index === lastSentCursorIndex.current) return; 
         lastSentCursorIndex.current = index;
 
         try {
             await connection.invoke("SendCursorPosition", matchId, index);
         } catch (error) {
-            console.error("SendCursorPosition failed:", error); // Changed from console.log to console.error
+            console.error("SendCursorPosition failed:", error); 
         }
     };
 
@@ -140,12 +169,15 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
         gameStatus,
         finalMines,
         isFrozen,
+        isPaused,
+        timeElapsed,
         freezeTimer,
         playerProgress,
         opponentProgress,
         opponentCursor,
         revealCell,
         toggleFlag,
-        sendCursorMove
+        sendCursorMove,
+        togglePause,
     };
 };
