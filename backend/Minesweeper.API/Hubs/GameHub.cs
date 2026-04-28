@@ -140,7 +140,7 @@ namespace Minesweeper.API.Hubs
         {
             if (ActiveMatches.TryRemove(matchId, out var match))
             {
-                await Clients.Group(matchId.ToString()).SendAsync("MatchFinished", new { Status = "Defeat" });
+                await Clients.Group(matchId.ToString()).SendAsync("MatchFinished", new { Status = "Abandoned" });
             }
         }
 
@@ -190,15 +190,17 @@ namespace Minesweeper.API.Hubs
             match.ModeStrategy.InitializeGame(match, width, height, minesCount);
             ActiveMatches.TryAdd(matchId, match);
 
-            // Додаємо в групу, щоб логіка LeaveMatch і Group розсилок працювала коректно
             await Groups.AddToGroupAsync(connectionId, matchId.ToString());
+
+            match.StartTime = DateTime.UtcNow;
 
             await Clients.Caller.SendAsync("GameStarted", new
             {
                 MatchId = matchId.ToString(),
                 Mode = "Solo",
                 Rows = height,
-                Cols = width
+                Cols = width,
+                TotalMines = minesCount
             });
         }
 
@@ -220,12 +222,15 @@ namespace Minesweeper.API.Hubs
             await Groups.AddToGroupAsync(player1Id, matchId.ToString());
             await Groups.AddToGroupAsync(player2Id, matchId.ToString());
 
+            match.StartTime = DateTime.UtcNow;
+
             await Clients.Group(matchId.ToString()).SendAsync("GameStarted", new
             {
                 MatchId = matchId.ToString(),
                 Mode = mode,
                 Rows = 16,
-                Cols = 16
+                Cols = 16,
+                match.TotalMines
             });
         }
     }
