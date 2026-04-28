@@ -65,7 +65,8 @@ The application uses a single main hub — `GameHub`, which manages the Lobby an
 * **Flood Fill:** Clicking on an empty cell recursively reveals all adjacent empty zones on the backend.
 * **Chording:** The frontend supports quickly revealing cells (Chording) when clicking on a number if there are enough flags around it.
 * **Optimistic Updates:** Flag placements are handled optimistically on the client to ensure zero perceived latency, with a robust server rollback mechanism on failure.
-
+* **Network Optimization & Throttling:** High-frequency events (like opponent cursor movement) are throttled and deduplicated on the client before broadcasting. Event delegation is used on the board grid to minimize DOM listener overhead.
+* **Concurrency & Matchmaking Safety:** The matchmaking process uses atomic reservations (`Reservations.TryAdd`) to prevent race conditions (TOCTOU) when players accept challenges simultaneously or spam requests.
 ---
 
 ## 5. Game Engine (Backend Design Patterns)
@@ -114,6 +115,12 @@ To easily support different modes (PvP Speedrun, Co-op, Solo), game logic is gov
     * Refactor backend to utilize the `IGameModeStrategy` pattern.
     * Implement logic for 2 independent boards for PvP (including opponent progress tracking).
     * Implement freeze penalty mechanics and rollback handling.
+* **Phase 4.5: Optimization & Security — [DONE]**
+    * Implement atomic matchmaking reservations to fix TOCTOU race conditions.
+    * Add defensive input validation for board generation (preventing OOM and infinite loops).
+    * Optimize frontend rendering with Event Delegation and SignalR throttling.
+    * Standardize environment configuration (`.env`) for dynamic API routing and easy LAN testing.
+    * Upgrade server logging from Console to structured `ILogger` telemetry.    
 * **Phase 5: Persistence & Leaderboards — [NEXT]**
     * Connect the database to save match results (`MatchHistory`).
     * Write results to the `SoloLeaderboard` table and display it on the client.

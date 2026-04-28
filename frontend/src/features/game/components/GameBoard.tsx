@@ -1,13 +1,15 @@
-import React, { useState, useCallback, useRef } from 'react';
+import {useState, useCallback, useRef, useEffect, useMemo} from 'react';
 import { HubConnection } from '@microsoft/signalr';
 import { useGameEngine } from '../../../hooks/useGameEngine';
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
+import * as React from "react";
 
 interface GameBoardProps {
     connection: HubConnection | null;
     matchId: string;
     width: number;
     height: number;
+    totalMines: number;
     onLeave: () => void;
     mode: "Solo" | "CoOp" | "PvP";
 }
@@ -28,38 +30,32 @@ const getNeighbors = (index: number, width: number, height: number) => {
     return res;
 };
 
-export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width, height, onLeave, mode }) => {
+export const GameBoard = ({ connection, matchId, width, height, totalMines, onLeave, mode }: GameBoardProps) => {
     const {
         revealedCells, flaggedCells, gameStatus, finalMines,
         isFrozen, freezeTimer, revealCell, toggleFlag,
-        playerProgress, opponentProgress, opponentCursor, sendCursorMove
+        playerProgress, opponentProgress, opponentCursor, sendCursorMove,
+        timeElapsed, isPaused, togglePause
     } = useGameEngine(connection, matchId);
 
     const [clickMode, setClickMode] = useState<"reveal" | "flag">("reveal");
 
-    // --- Тротлінг та дедуплікація курсору ---
     const lastSentIndex = useRef<number | null>(null);
     const lastThrottleTime = useRef<number>(0);
 
     const throttledCursorMove = useCallback((index: number | null) => {
-        // Запобіжник: якщо ми в соло режимі, просто ігноруємо рух курсора
         if (mode === "Solo") return;
-
-        // Запобіжник NaN (якщо data-index був відсутній або некоректний)
         if (index !== null && Number.isNaN(index)) return;
 
         const now = Date.now();
-        // Якщо індекс той самий — нічого не шлемо
         if (index === lastSentIndex.current) return;
 
-        // Шлемо не частіше ніж раз на 50мс (або миттєво, якщо це null — прибирання курсору)
         if (index === null || now - lastThrottleTime.current > 50) {
             lastSentIndex.current = index;
             lastThrottleTime.current = now;
-            sendCursorMove(index)
-            .catch();
+            void sendCursorMove(index).catch(console.error);
         }
-    }, [sendCursorMove, mode]); // Додали mode в залежності
+    }, [sendCursorMove, mode]);
 
     const handleCellClick = (index: number, x: number, y: number) => {
         const cell = revealedCells[index];
@@ -89,7 +85,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
         }
     };
 
-    const finalMinesSet = React.useMemo(() => new Set(finalMines), [finalMines]);
+    const finalMinesSet = useMemo(() => new Set(finalMines), [finalMines]);
     const numberColors = ["", "text-blue-500", "text-green-500", "text-red-500", "text-purple-500", "text-yellow-600", "text-cyan-500", "text-black", "text-gray-600"];
 
     const cells = [];
@@ -103,7 +99,6 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
             cells.push(
                 <div
                     key={index}
-                    // ✅ Додали data-index для делегації подій
                     data-index={index}
                     className={`
                         w-[30px] h-[30px] flex-shrink-0 flex items-center justify-center font-bold text-base select-none rounded-sm transition-all relative
@@ -133,35 +128,47 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
 
                     {cell && cell.adjacentMines > 0 ? <span className={numberColors[cell.adjacentMines]}>{cell.adjacentMines}</span> : ''}
                     {isMine && !isFlagged ? '💣' : ''}
-                    {isFlagged ? '🚩' : ''}
+                    {isFlagged && !cell ? '🚩' : ''}
                 </div>
             );
         }
     }
 
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.repeat) return;
+            if (e.key === "Escape" && mode === "Solo" && gameStatus === "Playing") {
+                togglePause();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [mode, gameStatus, togglePause]);
+
     return (
-        <div className="flex flex-col xl:flex-row items-center xl:items-start justify-center w-full max-w-full h-full px-2 gap-4 xl:gap-8">
+        <div className="flex flex-col xl:flex-row items-center xl:items-start justify-start xl:justify-center w-full max-w-full h-full px-2 gap-4 xl:gap-8 relative">
 
             {mode === "PvP" && (
-                <div className="order-1 xl:order-1 w-full max-w-sm xl:w-72 flex-shrink-0 bg-gray-900 p-4 xl:p-5 rounded-xl border-2 border-gray-700 shadow-xl flex flex-col gap-4 xl:gap-6 xl:mt-2">
-                    <h3 className="text-lg xl:text-xl font-black text-white text-center border-b border-gray-700 pb-2 xl:pb-3 tracking-wide">⚔️ MATCH STATS</h3>
+                <div className="order-1 xl:order-1 w-full max-w-sm xl:w-72 flex-shrink-0 bg-gray-900 p-3 md:p-4 xl:p-5 rounded-xl border-2 border-gray-700 shadow-xl flex flex-col gap-3 md:gap-4 xl:gap-6 xl:mt-2">
                     <div>
-                        <div className="flex justify-between text-xs xl:text-sm font-bold mb-1 xl:mb-2">
+                        <div className="flex justify-between text-[10px] md:text-xs xl:text-sm font-bold mb-1 xl:mb-2">
                             <span className="text-blue-400">My Progress</span>
                             <span className="text-gray-300">{Math.round(playerProgress)}%</span>
                         </div>
-                        <div className="w-full bg-gray-800 rounded-full h-3 xl:h-4 overflow-hidden shadow-inner border border-gray-700">
+                        <div className="w-full bg-gray-800 rounded-full h-2 md:h-3 xl:h-4 overflow-hidden shadow-inner border border-gray-700">
                             <div className="bg-blue-500 h-full rounded-full transition-all duration-500 ease-out relative" style={{width: `${playerProgress}%`}}>
                                 <div className="absolute top-0 left-0 right-0 h-1 bg-white opacity-20"></div>
                             </div>
                         </div>
                     </div>
                     <div>
-                        <div className="flex justify-between text-xs xl:text-sm font-bold mb-1 xl:mb-2">
+                        <div className="flex justify-between text-[10px] md:text-xs xl:text-sm font-bold mb-1 xl:mb-2">
                             <span className="text-red-400">Opponent Progress</span>
                             <span className="text-gray-300">{Math.round(opponentProgress)}%</span>
                         </div>
-                        <div className="w-full bg-gray-800 rounded-full h-3 xl:h-4 overflow-hidden shadow-inner border border-gray-700">
+                        <div className="w-full bg-gray-800 rounded-full h-2 md:h-3 xl:h-4 overflow-hidden shadow-inner border border-gray-700">
                             <div className="bg-red-500 h-full rounded-full transition-all duration-500 ease-out relative" style={{width: `${opponentProgress}%`}}>
                                 <div className="absolute top-0 left-0 right-0 h-1 bg-white opacity-20"></div>
                             </div>
@@ -170,61 +177,114 @@ export const GameBoard: React.FC<GameBoardProps> = ({ connection, matchId, width
                 </div>
             )}
 
-            <div className="order-2 xl:order-2 relative bg-gray-800 border-4 border-gray-700 rounded-xl shadow-2xl z-0 w-fit max-w-full mx-auto flex flex-col h-fit max-h-full xl:max-h-[85vh] overflow-hidden">
-                <TransformWrapper
-                    initialScale={1}
-                    minScale={0.5}
-                    maxScale={3}
-                    wheel={{ step: 0.0005 }}
-                    pinch={{ step: 3 }}
-                    panning={{ velocityDisabled: true, allowLeftClickPan: false }}
-                    doubleClick={{ disabled: true }}
-                >
-                    <TransformComponent wrapperStyle={{ width: "fit-content", height: "fit-content", maxWidth: "100%" }}>
-                        {/* ✅ ОДИН обробник на весь контейнер замість 256 індивідуальних */}
-                        <div
-                            className="p-2 md:p-6"
-                            // Вимикаємо обробники подій для Solo режиму на рівні DOM, щоб не ганяти порожні цикли
-                            onMouseMove={mode === "Solo" ? undefined : (e) => {
-                                const target = e.target as HTMLElement;
-                                const cell = target.closest('[data-index]');
-                                if (cell) {
-                                    const idx = parseInt(cell.getAttribute('data-index') || '', 10);
-                                    throttledCursorMove(idx);
-                                }
-                            }}
-                            onMouseLeave={mode === "Solo" ? undefined : () => throttledCursorMove(null)}
-                        >
-                            <div
-                                className="grid gap-1 bg-gray-800 w-max mx-auto shadow-inner"
-                                style={{
-                                    gridTemplateColumns: `repeat(${width}, 30px)`,
-                                    gridTemplateRows: `repeat(${height}, 30px)`
-                                }}
-                                onContextMenu={(e) => e.preventDefault()}
+            <div className="order-2 xl:order-2 flex flex-col gap-4 w-full md:w-fit max-w-full">
+                <div className="w-full bg-gray-900 border-2 border-gray-700 rounded-xl shadow-xl p-2 md:p-4 flex flex-wrap justify-between items-center gap-2 md:gap-4 z-10">
+                    <div className="flex items-center gap-2 md:gap-8">
+                        <div className="flex flex-col items-center bg-gray-800 px-2 md:px-4 py-1 rounded-lg border border-gray-600 shadow-inner">
+                            <span className="text-[10px] md:text-xs text-gray-400 font-bold uppercase tracking-wider">Time</span>
+                            <span className="text-base md:text-2xl font-mono font-black text-blue-400 leading-none md:leading-normal">
+                                {String(Math.floor(timeElapsed / 60)).padStart(2, '0')}:{String(timeElapsed % 60).padStart(2, '0')}
+                            </span>
+                        </div>
+                        <div className="flex flex-col items-center bg-gray-800 px-2 md:px-4 py-1 rounded-lg border border-gray-600 shadow-inner">
+                            <span className="text-[10px] md:text-xs text-gray-400 font-bold uppercase tracking-wider">Mines</span>
+                            <span className="text-base md:text-2xl font-mono font-black text-red-400 leading-none md:leading-normal">
+                                🚩 {flaggedCells.size} / {totalMines}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 md:gap-4">
+                        {mode === "Solo" ? (
+                            <button
+                                onClick={togglePause}
+                                disabled={gameStatus !== "Playing"}
+                                aria-label={isPaused ? "Resume game" : "Pause game"}
+                                className={`px-4 md:px-6 py-1.5 md:py-2 font-black uppercase tracking-wide rounded-lg shadow-md transition-all text-xs md:text-base ${isPaused ? 'bg-green-600 hover:bg-green-500 text-white animate-pulse' : 'bg-gray-700 hover:bg-gray-600 text-gray-200'}`}
                             >
-                                {cells}
+                                {isPaused ? "▶" : "⏸"} <span className="hidden sm:inline">{isPaused ? " Resume" : " Pause"}</span>
+                            </button>
+                        ) : (
+                            <div className="text-[10px] md:text-sm font-bold text-gray-400 bg-gray-800 px-2 md:px-4 py-1.5 md:py-2 rounded-lg border border-gray-700">
+                                Mode: <span className={mode === "PvP" ? "text-purple-400" : "text-blue-400"}>{mode}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div
+                    className="relative bg-gray-800 border-4 border-gray-700 rounded-xl shadow-2xl z-0 w-full md:w-fit max-w-full flex flex-col items-center justify-center overflow-hidden mx-auto aspect-[var(--board-aspect)] md:aspect-auto h-auto md:h-fit md:max-h-full xl:max-h-[85vh]"
+                    style={{ "--board-aspect": `${width} / ${height}` } as React.CSSProperties}
+                ><TransformWrapper
+                        initialScale={1}
+                        minScale={0.5}
+                        maxScale={3}
+                        wheel={{ step: 0.0005 }}
+                        pinch={{ step: 3 }}
+                        panning={{ velocityDisabled: true, allowLeftClickPan: false }}
+                        doubleClick={{ disabled: true }}
+                        centerOnInit={true}
+                    >
+                    <TransformComponent wrapperClass="!w-full !h-full md:!h-fit" wrapperStyle={{ maxWidth: "100%" }}>                            <div
+                                className="p-2 md:p-6"
+                                onMouseMove={mode === "Solo" ? undefined : (e) => {
+                                    const target = e.target as HTMLElement;
+                                    const cell = target.closest('[data-index]');
+                                    if (cell) {
+                                        const idx = parseInt(cell.getAttribute('data-index') || '', 10);
+                                        if (!Number.isNaN(idx)) throttledCursorMove(idx);
+                                    }
+                                }}
+                                onMouseLeave={mode === "Solo" ? undefined : () => throttledCursorMove(null)}
+                            >
+                                <div
+                                    className="grid gap-1 bg-gray-800 w-max mx-auto shadow-inner"
+                                    style={{
+                                        gridTemplateColumns: `repeat(${width}, 30px)`,
+                                        gridTemplateRows: `repeat(${height}, 30px)`
+                                    }}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >
+                                    {cells}
+                                </div>
+                            </div>
+                        </TransformComponent>
+                    </TransformWrapper>
+
+                    {isPaused && gameStatus === "Playing" && (
+                        <div className="absolute inset-0 z-20 bg-gray-900/95 flex flex-col items-center justify-center backdrop-blur-sm rounded-xl">
+                            <h2 className="text-4xl md:text-7xl font-black text-gray-500 tracking-[0.2em] mb-4 md:mb-8">PAUSED</h2>
+                            <button onClick={togglePause} className="bg-blue-600 hover:bg-blue-500 text-white font-black py-3 px-8 md:py-4 md:px-12 rounded-xl text-lg md:text-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-transform hover:scale-105 uppercase">
+                                ▶ Resume Game
+                            </button>
+                        </div>
+                    )}
+                    {gameStatus !== "Playing" && (
+                        <div className="absolute inset-0 z-30 bg-black/80 flex items-center justify-center backdrop-blur-md rounded-xl p-4">
+                            <div className="bg-gray-800 p-6 md:p-10 rounded-2xl shadow-2xl text-center border-2 border-gray-600 w-full max-w-sm md:max-w-none">
+                                <h2 className={`text-3xl md:text-5xl font-black mb-4 md:mb-6 ${
+                                    gameStatus === "Victory" ? "text-green-400" :
+                                        gameStatus === "Abandoned" ? "text-yellow-400" : "text-red-500"
+                                }`}>
+                                    {gameStatus === "Victory" ? "🎉 YOU WON!" :
+                                        gameStatus === "Abandoned" && mode === "PvP" ? "🚪 OPPONENT LEFT" :
+                                            gameStatus === "Abandoned" ? "🚪 TEAMMATE LEFT" :
+                                                "💀 BOOM!"}
+                                </h2>
+                                {gameStatus === "Abandoned" && <p className="text-gray-300 text-sm md:text-base font-medium mb-6">A player disconnected.</p>}
+                                <button onClick={onLeave} className="bg-blue-600 hover:bg-blue-500 text-white font-black py-3 px-8 md:py-4 md:px-10 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-transform hover:scale-105 uppercase w-full md:w-auto">Back to Lobby</button>
                             </div>
                         </div>
-                    </TransformComponent>
-                </TransformWrapper>
-
-                {gameStatus !== "Playing" && (
-                    <div className="absolute inset-0 z-10 bg-black/70 flex items-center justify-center backdrop-blur-md">
-                        <div className="bg-gray-800 p-8 md:p-10 rounded-2xl shadow-2xl text-center border-2 border-gray-600">
-                            <h2 className="text-4xl md:text-5xl font-black mb-6 text-white">{gameStatus === "Victory" ? "🎉 YOU WON!" : "💀 BOOM!"}</h2>
-                            <button onClick={onLeave} className="bg-blue-600 hover:bg-blue-500 text-white font-black py-4 px-10 rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-transform hover:scale-105 uppercase">Back to Lobby</button>
+                    )}
+                    {isFrozen && (
+                        <div className="absolute inset-0 z-10 bg-red-900/80 flex items-center justify-center backdrop-blur-md">
+                            <div className="text-center text-white">
+                                <h2 className="text-2xl md:text-4xl font-black mb-2 md:mb-4 uppercase text-red-200">Penalty Freeze!</h2>
+                                <span className="text-6xl md:text-9xl font-black">{freezeTimer}</span>
+                            </div>
                         </div>
-                    </div>
-                )}
-                {isFrozen && (
-                    <div className="absolute inset-0 z-10 bg-red-900/80 flex items-center justify-center backdrop-blur-md">
-                        <div className="text-center text-white">
-                            <h2 className="text-3xl md:text-4xl font-black mb-4 uppercase text-red-200">Penalty Freeze!</h2>
-                            <span className="text-7xl md:text-9xl font-black">{freezeTimer}</span>
-                        </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
             <div className="order-3 xl:order-3 mt-2 xl:mt-2 flex flex-row xl:flex-col bg-gray-900 rounded-xl p-2 border-2 border-gray-700 shadow-xl shrink-0 gap-2 xl:w-32">

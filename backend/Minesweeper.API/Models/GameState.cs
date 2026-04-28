@@ -11,5 +11,9 @@ namespace Minesweeper.API.Models
         public ConcurrentDictionary<string, PlayerState> Players { get; set; } = new();
 
         public IGameModeStrategy ModeStrategy { get; set; } = null!;
+        public int TotalMines { get; set; }
+        public DateTime? StartTime { get; set; }
+        public long ElapsedMilliseconds { get; set; }
+        public bool IsPaused { get; set; }
     }
 }

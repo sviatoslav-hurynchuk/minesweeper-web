@@ -12,7 +12,7 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
 
     const [selectedMode, setSelectedMode] = useState<"PvP" | "CoOp">("PvP");
 
-    // Automatically clear the error message after 5 seconds
+    
     useEffect(() => {
         if (errorMessage) {
             const timer = setTimeout(() => {
@@ -28,9 +28,10 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
                 connection={connection}
                 matchId={activeGame.matchId}
                 user={user}
-                mode={activeGame.mode as "Solo" | "CoOp" | "PvP"} // Pass dynamic mode
+                mode={activeGame.mode as "Solo" | "CoOp" | "PvP"} 
                 width={activeGame.cols || 16}
                 height={activeGame.rows || 16}
+                totalMines={activeGame.totalMines}
                 onLeave={clearActiveGame}
             />
         );
@@ -40,7 +41,7 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
         <div className="flex flex-col items-center min-h-screen bg-gray-900 text-white w-full">
             <div className="max-w-2xl mx-auto mt-8 relative w-full px-4">
 
-                {/* --- NEW: Error Message Toast --- */}
+                
                 {errorMessage && (
                     <div className="absolute top-10 left-1/2 transform -translate-x-1/2 -mt-16 w-full max-w-md z-50 animate-fade-in-down">
                         <div className="bg-red-600 border-l-4 border-red-800 text-white p-4 rounded-lg shadow-xl flex justify-between items-start">
@@ -57,7 +58,7 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
                         </div>
                     </div>
                 )}
-                {/* ------------------------------- */}
+                
 
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold">Lobby</h1>
@@ -86,7 +87,7 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
                         </button>
                     </div>
                 </div>
-                {/* NEW: Mode Selector */}
+                
                 <div className="bg-black p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex gap-4 items-center">
                     <span className="font-bold">Select Mode:</span>
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -123,7 +124,7 @@ export const LobbyScreen = ({ user }: LobbyScreenProps) => {
                 </div>
             </div>
 
-            {/* Challenge Alert Modal */}
+            
             {incomingChallenge && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-40">
                     <div className="bg-white p-6 rounded-xl shadow-lg text-center text-gray-900">
