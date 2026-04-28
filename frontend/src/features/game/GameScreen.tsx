@@ -15,15 +15,8 @@ interface GameScreenProps {
 }
 
 export function GameScreen({ connection, matchId, user, mode, width, height, totalMines, onLeave }: GameScreenProps) {
-    const handleLeaveMatch = async () => {
-        if (!window.confirm("Are you sure you want to leave the match?")) return;
-        if (!connection) {
-            onLeave();
-            return;
-        }
-        try {
-            await connection.invoke("LeaveMatch", matchId);
-        } finally {
+    const handleLeaveMatch = () => {
+        if (window.confirm("Are you sure you want to leave the match?")) {
             onLeave();
         }
     };
