@@ -8,6 +8,7 @@ namespace Minesweeper.API.Strategies
     {
         public void InitializeGame(GameState session, int width, int height, int minesCount)
         {
+            session.TotalMines = minesCount;
             int commonSeed = new Random().Next();
 
             foreach (var player in session.Players.Values)

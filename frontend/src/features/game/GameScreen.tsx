@@ -34,10 +34,10 @@ export function GameScreen({ connection, matchId, user, mode, width, height, tot
 
             
             
-            <div className="w-full max-w-6xl flex justify-between items-center px-4 md:px-8 py-2 md:py-4 shrink-0">
+            <div className="w-full max-w-6xl flex justify-between items-center px-4 md:px-8 py-2 shrink-0">
                 <div>
                     
-                    <h1 className="text-xl md:text-3xl font-bold">
+                    <h1 className="text-xl font-bold">
                         💣 Minesweeper: <span className="text-blue-400">{mode}</span>
                     </h1>
                     

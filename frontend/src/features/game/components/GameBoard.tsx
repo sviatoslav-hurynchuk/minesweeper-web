@@ -178,17 +178,17 @@ export const GameBoard = ({ connection, matchId, width, height, totalMines, onLe
             )}
 
             <div className="order-2 xl:order-2 flex flex-col gap-4 w-full md:w-fit max-w-full">
-                <div className="w-full bg-gray-900 border-2 border-gray-700 rounded-xl shadow-xl p-2 md:p-4 flex flex-wrap justify-between items-center gap-2 md:gap-4 z-10">
+                <div className="w-full bg-gray-900 border-2 border-gray-700 rounded-xl shadow-xl p-2 md:px-4 flex flex-wrap justify-between items-center gap-2 md:gap-4 z-10">
                     <div className="flex items-center gap-2 md:gap-8">
                         <div className="flex flex-col items-center bg-gray-800 px-2 md:px-4 py-1 rounded-lg border border-gray-600 shadow-inner">
                             <span className="text-[10px] md:text-xs text-gray-400 font-bold uppercase tracking-wider">Time</span>
-                            <span className="text-base md:text-2xl font-mono font-black text-blue-400 leading-none md:leading-normal">
+                            <span className="text-base font-mono font-black text-blue-400 leading-none md:leading-normal">
                                 {String(Math.floor(timeElapsed / 60)).padStart(2, '0')}:{String(timeElapsed % 60).padStart(2, '0')}
                             </span>
                         </div>
                         <div className="flex flex-col items-center bg-gray-800 px-2 md:px-4 py-1 rounded-lg border border-gray-600 shadow-inner">
                             <span className="text-[10px] md:text-xs text-gray-400 font-bold uppercase tracking-wider">Mines</span>
-                            <span className="text-base md:text-2xl font-mono font-black text-red-400 leading-none md:leading-normal">
+                            <span className="text-base font-mono font-black text-red-400 leading-none md:leading-normal">
                                 🚩 {flaggedCells.size} / {totalMines}
                             </span>
                         </div>
@@ -226,7 +226,7 @@ export const GameBoard = ({ connection, matchId, width, height, totalMines, onLe
                         centerOnInit={true}
                     >
                     <TransformComponent wrapperClass="!w-full !h-full md:!h-fit" wrapperStyle={{ maxWidth: "100%" }}>                            <div
-                                className="p-2 md:p-6"
+                                className="p-2"
                                 onMouseMove={mode === "Solo" ? undefined : (e) => {
                                     const target = e.target as HTMLElement;
                                     const cell = target.closest('[data-index]');

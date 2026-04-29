@@ -26,7 +26,7 @@ export const useGameEngine = (connection: HubConnection | null, matchId: string)
     const isFrozen = freezeTimer > 0;
 
     useEffect(() => {
-        if (gameStatus === "Playing" && !isFrozen && !isPaused) {
+        if (gameStatus === "Playing" && !isPaused) {
             const timer = setInterval(() => {
                 setTimeElapsed(prev => prev + 1);
             }, 1000);
