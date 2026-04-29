@@ -9,6 +9,7 @@ namespace Minesweeper.API.Strategies
     {
         public void InitializeGame(GameState session, int width, int height, int minesCount)
         {
+            session.TotalMines = minesCount;
             // 1. Generate ONE shared board
             var sharedBoard = new GameBoard(width, height, minesCount);
 
