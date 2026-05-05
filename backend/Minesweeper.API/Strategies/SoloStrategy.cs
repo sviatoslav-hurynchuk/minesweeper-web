@@ -5,55 +5,100 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Minesweeper.API.Strategies
 {
+    /// <summary>
+    /// Реалізація соло-режиму з використанням паттернів Strategy та Template Method elements.
+    /// </summary>
     public class SoloStrategy : IGameModeStrategy
     {
+        // Константи для запобігання "Magic Strings"
+        private const string EventBoardUpdated = "BoardUpdated";
+        private const string EventMatchFinished = "MatchFinished";
+
         public void InitializeGame(GameState session, int width, int height, int minesCount)
         {
-            // Solo mode only has one player
-            var player = session.Players.Values.First();
+            var player = session.Players.Values.FirstOrDefault();
+            
+            if (player == null) return;
 
-            // Initialize a standard independent board
+            // Використання стандартної ініціалізації (можна було б додати Factory, 
+            // якби ми могли змінювати GameBoard)
             player.Board = new GameBoard(width, height, minesCount);
         }
 
-        public async Task HandleRevealAsync(GameState session, string connectionId, int x, int y, IClientProxy clientProxy, IClientProxy opponentProxy, IClientProxy groupProxy)
+        public async Task HandleRevealAsync(
+            GameState session, 
+            string connectionId, 
+            int x, int y, 
+            IClientProxy clientProxy, 
+            IClientProxy opponentProxy, 
+            IClientProxy groupProxy)
         {
-            if (!session.Players.TryGetValue(connectionId, out var player))
+            if (!TryGetValidPlayer(session, connectionId, out var player))
                 return;
-
-            if (player.IsGameOver) return;
 
             var result = player.Board.RevealCell(x, y);
 
+            // Паттерн: Розгалуження логіки на основі стану (State-like behavior)
             if (result.IsMine)
             {
-                player.IsGameOver = true;
-
-                // Reveal all mines to the player upon defeat
-                var allMines = player.Board.GetAllMines();
-                await clientProxy.SendAsync("BoardUpdated", result.RevealedCells); // Show the clicked mine
-                await clientProxy.SendAsync("MatchFinished", new { Status = "Defeat", Mines = allMines });
+                await HandleDefeatAsync(player, clientProxy, result);
             }
             else
             {
-                // Send safely revealed cells to the client
-                await clientProxy.SendAsync("BoardUpdated", result.RevealedCells);
-
-                // Check if the player has successfully uncovered all safe cells
-                if (player.Board.IsWinConditionMet())
-                {
-                    player.IsGameOver = true;
-
-                    // Calculate final time (assuming MatchStartTime is stored in GameState)
-                    // long timeSpentMs = DateTime.UtcNow.Subtract(session.MatchStartTime).TotalMilliseconds;
-
-                    await clientProxy.SendAsync("MatchFinished", new { Status = "Victory" });
-
-                    // NOTE: The actual database insertion for the SoloLeaderboard 
-                    // should be handled by a Domain Service or an Event Publisher here, 
-                    // not directly inside the SignalR Strategy to keep concerns separated.
-                }
+                await HandleProgressAsync(player, clientProxy, result);
             }
         }
+
+        #region Private Helper Methods (Encapsulation)
+
+        private bool TryGetValidPlayer(GameState session, string connectionId, out PlayerState player)
+        {
+            return session.Players.TryGetValue(connectionId, out player) && !player.IsGameOver;
+        }
+
+        private async Task HandleDefeatAsync(PlayerState player, IClientProxy clientProxy, RevealResult result)
+        {
+            player.IsGameOver = true;
+            
+            // Спочатку показуємо міну, яку натиснув гравець
+            await clientProxy.SendAsync(EventBoardUpdated, result.RevealedCells);
+            
+            // Відкриваємо всі інші міни (Strategy-specific logic)
+            var allMines = player.Board.GetAllMines();
+            await clientProxy.SendAsync(EventMatchFinished, new 
+            { 
+                Status = "Defeat", 
+                Mines = allMines,
+                Message = "Game Over! You hit a mine."
+            });
+        }
+
+        private async Task HandleProgressAsync(PlayerState player, IClientProxy clientProxy, RevealResult result)
+        {
+            // Оновлюємо стан поля у клієнта
+            await clientProxy.SendAsync(EventBoardUpdated, result.RevealedCells);
+
+            // Перевірка умови перемоги (Template Method step)
+            if (player.Board.IsWinConditionMet())
+            {
+                await HandleVictoryAsync(player, clientProxy);
+            }
+        }
+
+        private async Task HandleVictoryAsync(PlayerState player, IClientProxy clientProxy)
+        {
+            player.IsGameOver = true;
+
+            // Тут можна додати Observer або Event Publisher для SoloLeaderboard,
+            // якби у нас був доступ до DI контейнера або інших класів.
+            
+            await clientProxy.SendAsync(EventMatchFinished, new 
+            { 
+                Status = "Victory",
+                Timestamp = DateTime.UtcNow 
+            });
+        }
+
+        #endregion
     }
 }
