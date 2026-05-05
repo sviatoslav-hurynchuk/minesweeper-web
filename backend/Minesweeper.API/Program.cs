@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Minesweeper.API.Data;
 using Minesweeper.API.Models;
 using Scalar.AspNetCore;
+using Minesweeper.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +16,8 @@ builder.Services.AddSignalR().AddJsonProtocol(options =>
 {
     options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
 });
+
+builder.Services.AddSingleton<IMatchManager, MatchManager>();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
