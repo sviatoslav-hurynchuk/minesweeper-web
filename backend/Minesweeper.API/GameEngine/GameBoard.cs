@@ -121,7 +121,7 @@ namespace Minesweeper.API.GameEngine
                 _adjacentMinesCache.Clear();
                 foreach (var kvp in bestAdjacentMinesCache) _adjacentMinesCache[kvp.Key] = kvp.Value;
 
-                Console.WriteLine($"[Warning] Failed to generate 100% logical board after {maxAttempts} attempts. Using best available which revealed {bestRevealedCount} cells.");
+                Console.WriteLine($"[Warning] Failed to generate 100% logical board after {MaxBoardGenerationAttempts} attempts. Using best available which revealed {bestRevealedCount} cells.");
             }
 
             IsGenerated = true;
