@@ -6,6 +6,7 @@ namespace Minesweeper.API.GameEngine
 {
     public class GameBoard
     {
+        private const int MaxBoardGenerationAttempts = 100;
         public int Width { get; }
         public int Height { get; }
         public int MinesCount { get; }
@@ -77,7 +78,6 @@ namespace Minesweeper.API.GameEngine
             int totalCells = Width * Height;
             var safeZone = new HashSet<int>(GetNeighbors(safeIndex)) { safeIndex };
 
-            int maxAttempts = 100; 
             int attempts = 0;
             bool isLogicallySolvable = false;
 
@@ -85,28 +85,15 @@ namespace Minesweeper.API.GameEngine
             HashSet<int> bestMinePositions = new();
             Dictionary<int, int> bestAdjacentMinesCache = new();
 
-            while (!isLogicallySolvable && attempts < maxAttempts)
+            while (!isLogicallySolvable && attempts < MaxBoardGenerationAttempts)
             {
                 attempts++;
-                MinePositions.Clear();
-                _adjacentMinesCache.Clear();
 
                 // 1. Random mine placement
-                while (MinePositions.Count < MinesCount)
-                {
-                    int pos = rand.Next(totalCells);
-                    if (!safeZone.Contains(pos))
-                    {
-                        MinePositions.Add(pos);
-                    }
-                }
+                GenerateRandomMinePositions(rand, totalCells, safeZone);
 
                 // 2. Caching neighbors
-                for (int i = 0; i < totalCells; i++)
-                {
-                    if (!MinePositions.Contains(i))
-                        _adjacentMinesCache[i] = GetNeighbors(i).Count(n => MinePositions.Contains(n));
-                }
+                RebuildAdjacentMinesCache(totalCells);
 
                 // 3. Logic check
                 isLogicallySolvable = SimulateLogicalGame(safeIndex, out int revealedCount);
@@ -134,13 +121,61 @@ namespace Minesweeper.API.GameEngine
                 _adjacentMinesCache.Clear();
                 foreach (var kvp in bestAdjacentMinesCache) _adjacentMinesCache[kvp.Key] = kvp.Value;
 
-                Console.WriteLine($"[Warning] Failed to generate 100% logical board after {maxAttempts} attempts. Using best available which revealed {bestRevealedCount} cells.");
+                Console.WriteLine($"[Warning] Failed to generate 100% logical board after {MaxBoardGenerationAttempts} attempts. Using best available which revealed {bestRevealedCount} cells.");
             }
 
             IsGenerated = true;
         }
 
         // --- Внутрішній БОТ-СИМУЛЯТОР ---
+
+        private void GenerateRandomMinePositions(Random rand, int totalCells, HashSet<int> safeZone)
+        {
+            MinePositions.Clear();
+
+            while (MinePositions.Count < MinesCount)
+            {
+                int position = rand.Next(totalCells);
+
+                if (!safeZone.Contains(position))
+                {
+                    MinePositions.Add(position);
+                }
+            }
+        }
+
+        private void RebuildAdjacentMinesCache(int totalCells)
+        {
+            _adjacentMinesCache.Clear();
+
+            for (int i = 0; i < totalCells; i++)
+            {
+                if (!MinePositions.Contains(i))
+                {
+                    _adjacentMinesCache[i] = CountAdjacentMines(i);
+                }
+            }
+        }
+
+        private int CountAdjacentMines(int index)
+        {
+            return GetNeighbors(index).Count(neighbor => MinePositions.Contains(neighbor));
+        }
+
+        private void RestoreBestBoardState(
+            HashSet<int> bestMinePositions,
+            Dictionary<int, int> bestAdjacentMinesCache)
+        {
+            MinePositions = new HashSet<int>(bestMinePositions);
+
+            _adjacentMinesCache.Clear();
+
+            foreach (var cacheItem in bestAdjacentMinesCache)
+            {
+                _adjacentMinesCache[cacheItem.Key] = cacheItem.Value;
+            }
+        }
+
         private bool SimulateLogicalGame(int startIndex, out int revealedCount)
         {
             var simulatedRevealed = new HashSet<int>();
