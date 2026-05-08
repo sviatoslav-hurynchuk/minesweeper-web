@@ -7,7 +7,9 @@ namespace Minesweeper.API.Services
     public interface IGameStateManager
     {
         ConcurrentDictionary<Guid, GameState> ActiveMatches { get; }
-        ConcurrentDictionary<string, PlayerData> OnlinePlayers { get; }
+
+        ConcurrentDictionary<string, PlayerData> GetOnlinePlayers();
+
         ConcurrentDictionary<string, byte> Reservations { get; }
     }
 }

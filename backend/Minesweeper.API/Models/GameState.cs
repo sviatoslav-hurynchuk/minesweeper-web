@@ -8,7 +8,7 @@ namespace Minesweeper.API.Models
         public Guid MatchId { get; set; }
         public string GameMode { get; set; } = string.Empty;
 
-        public ConcurrentDictionary<string, PlayerState> Players { get; set; } = new();
+        public ConcurrentDictionary<string, PlayerData> Players { get; set; } = new();
 
         public IGameModeStrategy ModeStrategy { get; set; } = null!;
         public int TotalMines { get; set; }

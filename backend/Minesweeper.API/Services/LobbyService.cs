@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Minesweeper.API.Hubs;
+using Minesweeper.API.Models;
 
 namespace Minesweeper.API.Services
 {
@@ -26,15 +27,15 @@ namespace Minesweeper.API.Services
         public async Task JoinLobbyAsync(string connectionId, string username, string userId)
         {
             var player = new PlayerData { ConnectionId = connectionId, Username = username, UserId = userId };
-            _state.OnlinePlayers.AddOrUpdate(connectionId, player, (_, _) => player);
-            await _hubContext.Clients.All.SendAsync("LobbyUpdated", _state.OnlinePlayers.Values);
+            _state.GetOnlinePlayers().AddOrUpdate(connectionId, player, (_, _) => player);
+            await _hubContext.Clients.All.SendAsync("LobbyUpdated", _state.GetOnlinePlayers().Values);
         }
 
         public async Task HandleDisconnectAsync(string connectionId)
         {
-            if (_state.OnlinePlayers.TryRemove(connectionId, out _))
+            if (_state.GetOnlinePlayers().TryRemove(connectionId, out _))
             {
-                await _hubContext.Clients.All.SendAsync("LobbyUpdated", _state.OnlinePlayers.Values);
+                await _hubContext.Clients.All.SendAsync("LobbyUpdated", _state.GetOnlinePlayers().Values);
             }
 
             var activeMatch = _state.ActiveMatches.Values.FirstOrDefault(m => m.Players.ContainsKey(connectionId));
@@ -46,7 +47,7 @@ namespace Minesweeper.API.Services
 
         public async Task ChallengePlayerAsync(string challengerId, string targetConnectionId, string mode)
         {
-            if (_state.OnlinePlayers.TryGetValue(challengerId, out var challenger))
+            if (_state.GetOnlinePlayers().TryGetValue(challengerId, out var challenger))
             {
                 await _hubContext.Clients.Client(targetConnectionId).SendAsync("ChallengeReceived", challenger.Username, challengerId, mode);
             }

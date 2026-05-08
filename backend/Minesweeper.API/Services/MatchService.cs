@@ -43,8 +43,8 @@ namespace Minesweeper.API.Services
             Guid matchId = Guid.NewGuid();
             var match = new GameState { MatchId = matchId, GameMode = "Solo", ModeStrategy = new SoloStrategy() };
 
-            string username = _state.OnlinePlayers.GetValueOrDefault(connectionId)?.Username ?? "Solo Player";
-            match.Players.TryAdd(connectionId, new PlayerState { ConnectionId = connectionId, Username = username });
+            string username = _state.GetOnlinePlayers().GetValueOrDefault(connectionId)?.Username ?? "Solo Player";
+            match.Players.TryAdd(connectionId, new PlayerData { ConnectionId = connectionId, Username = username });
 
             match.ModeStrategy.InitializeGame(match, width, height, minesCount);
             _state.ActiveMatches.TryAdd(matchId, match);
@@ -65,7 +65,7 @@ namespace Minesweeper.API.Services
         public async Task AcceptChallengeAsync(string acceptorId, string challengerConnectionId, string mode)
         {
             var acceptorClient = _hubContext.Clients.Client(acceptorId);
-            if (!_state.OnlinePlayers.TryGetValue(challengerConnectionId, out var challenger))
+            if (!_state.GetOnlinePlayers().TryGetValue(challengerConnectionId, out var challenger))
             {
                 await acceptorClient.SendAsync("ErrorMessage", "Гравець вийшов з мережі."); return;
             }
@@ -106,8 +106,8 @@ namespace Minesweeper.API.Services
                 ModeStrategy = mode == "PvP" ? new PvpSpeedrunStrategy() : new CoOpStrategy()
             };
 
-            match.Players.TryAdd(player1Id, new PlayerState { ConnectionId = player1Id, Username = _state.OnlinePlayers.GetValueOrDefault(player1Id)?.Username ?? "Player 1" });
-            match.Players.TryAdd(player2Id, new PlayerState { ConnectionId = player2Id, Username = _state.OnlinePlayers.GetValueOrDefault(player2Id)?.Username ?? "Player 2" });
+            match.Players.TryAdd(player1Id, new PlayerData { ConnectionId = player1Id, Username = _state.GetOnlinePlayers().GetValueOrDefault(player1Id)?.Username ?? "Player 1" });
+            match.Players.TryAdd(player2Id, new PlayerData { ConnectionId = player2Id, Username = _state.GetOnlinePlayers().GetValueOrDefault(player2Id)?.Username ?? "Player 2" });
 
             match.ModeStrategy.InitializeGame(match, 16, 16, 40);
             _state.ActiveMatches.TryAdd(matchId, match);
