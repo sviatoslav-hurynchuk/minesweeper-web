@@ -2,7 +2,7 @@
 
 namespace Minesweeper.API.Models
 {
-    public class PlayerState
+    public class PlayerData
     {
         public required string ConnectionId { get; set; }
         public required string Username { get; set; }
@@ -12,5 +12,6 @@ namespace Minesweeper.API.Models
         public bool IsReady { get; set; }
         public bool IsGameOver { get; set; }
         public DateTime? PenaltyUntil { get; set; }
+        public string UserId { get; internal set; }
     }
 }

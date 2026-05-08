@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Minesweeper.API.Data;
 using Minesweeper.API.Models;
+using Minesweeper.API.Services;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,6 +9,11 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
+
+builder.Services.AddSingleton<IGameStateManager, GameStateManager>();
+builder.Services.AddScoped<IGameplayService, GameplayService>();
+builder.Services.AddScoped<ILobbyService, LobbyService>();
+builder.Services.AddScoped<IMatchService, MatchService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
